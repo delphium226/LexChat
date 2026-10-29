@@ -10702,7 +10702,17 @@ def cmd_jurisdiction(args) -> int:
 # deliberately NOT the product's own keep test (`utils/source_naming.py`): a
 # grader built from the code it grades cannot see that code's mistakes.
 
-RAIL_BAR = 0.15  # P4.3 (ii): the reader-unused rate on report turns, per chat mode
+# P4.3 (ii)'s bar was the reader-unused rate on report turns, per chat mode. P3.56
+# (user decision, option (b)) took it out of the bar: 127 of 140 unused entries
+# were rightly left out of the answer and 121 of 140 are kept because the Worker
+# retrieved their text, so the rate measures retrieval breadth, not the answer.
+# It is printed as a watch item, marked against this line.
+RAIL_BAR = 0.15
+# P3.56: a References list is not a report's prose. The measurement's own
+# heading tests (`p356_table.py`), so the grader counts what it judged.
+_RAIL_REF_HEAD = re.compile(
+    r"^\s*(#+\s*|\*\*)?\s*(references|sources|bibliography|authorities consulted)\b", re.I)
+_RAIL_HEAD = re.compile(r"^\s*(#+\s|\*\*[^*]+\*\*\s*$)")
 _RAIL_URL_ANY = re.compile(r"https?://[^\s)\]>\"'<]+", re.I)
 # A regnal-year id has four segments (`ukpga/geo6/14/51`): read as three, every
 # Act of one session was "cited" by any other (batch 11 C, 36 report verdicts).
@@ -10893,6 +10903,23 @@ def _rail_text_index(text: str) -> tuple:
     return text, _rail_norm_text(text), {_rail_lid_of_url(u) for u in leg} - {""}, case
 
 
+def rail_report_prose(report: str) -> str:
+    """A report's own prose: its lines outside a References/Sources list (a
+    heading of that name opens one, the next heading closes it). The caller
+    strips the scope blocks first, so a code-derived block is not prose either."""
+    out = []
+    in_ref = False
+    for ln in (report or "").splitlines():
+        if _RAIL_REF_HEAD.match(ln):
+            in_ref = True
+            continue
+        if in_ref and _RAIL_HEAD.match(ln):
+            in_ref = False
+        if not in_ref:
+            out.append(ln)
+    return "\n".join(out)
+
+
 def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
     """One turn's rail, graded. The turn classes are batch 10 C's census:
 
@@ -10911,6 +10938,11 @@ def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
     does not reference it. An unvouched source the answer cites is what P4.3's
     lever R puts in the rail at the answer seam, not the fall-back; on every
     stored directory before lever R the two tests flag the same turns.
+
+    `dropped` (P3.56) is the bar's other half: a source the answer does not
+    reference that a completed report names in its own prose (scope blocks
+    stripped, a References list left out), i.e. one the report used and the
+    answer left out.
     """
     doc = doc or {}
     answer = t.get("answer") if isinstance(t.get("answer"), str) else ""
@@ -10946,14 +10978,19 @@ def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
     rep_text = ("\n".join(strip(d.get("report") or "")[0] for d in dgs if done(d))
                 if cls == "report" else "")
     r_idx = _rail_text_index(rep_text)
+    prose = rail_report_prose(rep_text)
+    p_idx = _rail_text_index(prose)
     for s in audit.get("sources") or []:
         reader = rail_reader(s, *b_idx)
         token = _source_cited(s, body)
         unvouched = bool(cls == "report" and not s.get("excerpt")
                          and not rail_reader(s, *r_idx) and not _source_cited(s, rep_text))
+        dropped = bool(cls == "report" and not reader
+                       and (rail_reader(s, *p_idx) or _source_cited(s, prose)))
         out["sources"].append({"src": s, "reader": reader, "token": token,
                                "unvouched": unvouched,
-                               "fallback": unvouched and not reader})
+                               "fallback": unvouched and not reader,
+                               "dropped": dropped})
     return out
 
 
@@ -10962,11 +10999,13 @@ def _rail_key(s: dict) -> str:
 
 
 def cmd_rail(args) -> int:
-    """P4.3's grader: the unused-source rate on report turns by the reader test,
-    per chat mode, and the report turns whose rail no report vouched for (the
-    fall-back). Exit 1 if any such turn exists, or any chat mode's rate is over
-    `RAIL_BAR`. `--drops` lists every source on which the reader and the token
-    test disagree, and every unvouched source: the both-ways audit."""
+    """P4.3's grader: the report turns whose rail no report vouched for (the
+    fall-back), and the sources a report used in its own prose that the answer
+    dropped (P3.56). Exit 1 if either exists. The unused-source rate by the
+    reader test, per chat mode, and the share of those kept for an excerpt, are
+    printed as a watch item (P3.56 took the rate out of the bar). `--drops` lists
+    every source on which the reader and the token test disagree, every
+    unvouched source and every dropped one: the both-ways audit."""
     root = Path(args.dir)
     exclude = {x for x in (args.exclude or "").split(",") if x}
     dirs = ([p for p in sorted(root.iterdir()) if p.is_dir() and p.name not in exclude]
@@ -10996,11 +11035,15 @@ def cmd_rail(args) -> int:
                 unused = sum(1 for x in g["sources"] if not x["reader"])
                 tok_unused = sum(1 for x in g["sources"] if not x["token"])
                 unv = sum(1 for x in g["sources"] if x["fallback"])
+                exc = sum(1 for x in g["sources"] if not x["reader"] and x["src"].get("excerpt"))
+                dropped = sum(1 for x in g["sources"] if x["dropped"])
                 ans_only = sum(1 for x in g["sources"] if x["unvouched"] and not x["fallback"])
                 for k in (m, "all"):
                     tally[(k, "turns")] += 1
                     tally[(k, "sources")] += n
                     tally[(k, "unused")] += unused
+                    tally[(k, "excerpt_kept")] += exc
+                    tally[(k, "dropped")] += dropped
                     tally[(k, "token_unused")] += tok_unused
                     tally[(k, "fallback_turns")] += bool(unv)
                     tally[(k, "unvouched")] += unv
@@ -11015,6 +11058,9 @@ def cmd_rail(args) -> int:
                         drops.append(f"  {'READER-ONLY ' + x['reader'] if x['reader'] else 'TOKEN-ONLY':<22}"
                                      f" {where}  {s.get('kind')}  {_rail_key(s)[:70]}"
                                      f"  | {(s.get('title') or '')[:args.chars]}")
+                    if x["dropped"]:
+                        drops.append(f"  {'DROPPED':<22} {where}  {s.get('kind')}  "
+                                     f"{_rail_key(s)[:70]}  | {(s.get('title') or '')[:args.chars]}")
                     if x["unvouched"]:
                         drops.append(f"  {'UNVOUCHED' if x['fallback'] else 'ANSWER-ONLY':<22} "
                                      f"{where}  {s.get('kind')}  "
@@ -11025,8 +11071,8 @@ def cmd_rail(args) -> int:
                                          ("report", "report_mixed", "no_report",
                                           "no_delegation", "unanswered")))
     print(f"  {'report turns with a rail':<34} {'turns':>6} {'sources':>8} "
-          f"{'unused (reader)':>18} {'token test':>14} {'fall-back turns':>16} {'cite none':>10}")
-    fail = False
+          f"{'unused (reader)':>18} {'token test':>14} {'fall-back turns':>16} {'cite none':>10}"
+          f" {'dropped':>8}")
     for k in _RAIL_MODES + ("all",):
         n = tally[(k, "sources")]
         if not tally[(k, "turns")]:
@@ -11034,14 +11080,21 @@ def cmd_rail(args) -> int:
         u = tally[(k, "unused")]
         rate = u / n if n else 0.0
         over = k != "all" and rate > RAIL_BAR
-        fail |= over
         print(f"  {k:<34} {tally[(k, 'turns')]:>6} {n:>8} "
               f"{u:>8} ({100 * rate:4.1f}%){'*' if over else ' '} "
               f"{tally[(k, 'token_unused')]:>6} ({100 * tally[(k, 'token_unused')] / n:3.0f}%) "
               f"{tally[(k, 'fallback_turns')]:>8} ({tally[(k, 'unvouched')]} src) "
-              f"{tally[(k, 'cite_none')]:>6}")
+              f"{tally[(k, 'cite_none')]:>6} {tally[(k, 'dropped')]:>8}")
     fb = tally[("all", "fallback_turns")]
-    fail |= bool(fb)
+    dr = tally[("all", "dropped")]
+    fail = bool(fb) or bool(dr)
+    print("  watch item (not the bar since P3.56): the unused share by chat mode above,"
+          f" * = over {RAIL_BAR:.0%}")
+    print("  unused sources kept because their text was retrieved (excerpt): "
+          + ", ".join(f"{k} {tally[(k, 'excerpt_kept')]} of {tally[(k, 'unused')]}"
+                      + (f" ({100 * tally[(k, 'excerpt_kept')] / tally[(k, 'unused')]:.0f}%)"
+                         if tally[(k, 'unused')] else "")
+                      for k in _RAIL_MODES + ("all",) if tally[(k, "turns")]))
     print(f"  sources no report vouched for that the answer cites (lever R re-admits these; "
           f"not the fall-back): {tally[('all', 'answer_only')]}")
     print(f"  reader vs token test: reader-only {tally['reader_only']}, token-only "
@@ -11049,8 +11102,8 @@ def cmd_rail(args) -> int:
     print(f"  fall-back detector vs the product counter (timing.source_filter_fallback):"
           f" both {agree[(True, True)]}, detector only {agree[(True, False)]},"
           f" counter only {agree[(False, True)]}, neither {agree[(False, False)]}")
-    print(f"  bar: 0 fall-back turns and each chat mode <= {RAIL_BAR:.0%} unused: "
-          f"{'NOT MET' if fail else 'MET'}  (* = over the bar)")
+    print(f"  bar: 0 fall-back turns and 0 sources a report used in its own prose that the "
+          f"answer dropped: {'NOT MET' if fail else 'MET'}  ({fb} fall-back turns, {dr} dropped)")
     if args.drops:
         print("\n  -- every disagreement and every unvouched source --")
         for ln in drops:
@@ -11550,9 +11603,9 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="print every sentence naming a nation, EXPLICIT or IMPLICIT")
     jx.add_argument("--chars", type=int, default=240)
     rl = sub.add_parser("rail",
-                        help="P4.3's grader: the unused-source rate on report turns by the "
-                             "careful-reader test, per chat mode, and the rails no report "
-                             "vouched for (exit 1 if over the bar)")
+                        help="P4.3's grader: the rails no report vouched for, and the sources "
+                             "a report used in its prose that the answer dropped (exit 1 if "
+                             "either); the careful-reader unused rate per chat mode is a watch item")
     rl.add_argument("--all", action="store_true",
                     help="--dir is the replay ROOT: walk every subdirectory")
     rl.add_argument("--exclude", default="",
@@ -11560,7 +11613,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "(e.g. baseline,wave1, the pre-P2.1 sweeps)")
     rl.add_argument("--drops", action="store_true",
                     help="list every source on which the reader and the token test "
-                         "disagree, and every unvouched source")
+                         "disagree, every unvouched source and every dropped one")
     rl.add_argument("--chars", type=int, default=80)
     lv = sub.add_parser("listcov",
                         help="P3.53's grader: where a made-under list was section-searched "

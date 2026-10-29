@@ -179,7 +179,8 @@ def test_rail_meets_the_bar_on_a_clean_directory(tmp_path, capsys):
     rc = rr.main(["--dir", str(d), "rail"])
     out = capsys.readouterr().out
     assert rc == 0, out
-    assert "bar: 0 fall-back turns and each chat mode <= 15% unused: MET" in out
+    assert ("bar: 0 fall-back turns and 0 sources a report used in its own prose that the "
+            "answer dropped: MET") in out
 
 
 def test_rail_fails_on_a_fall_back_turn(tmp_path, capsys):
@@ -202,26 +203,64 @@ def test_rail_fails_on_a_fall_back_turn(tmp_path, capsys):
     assert "UNVOUCHED" in out and "ssi/1901/1" in out
 
 
-def test_rail_fails_when_a_mode_is_over_the_bar(tmp_path, capsys):
+def test_the_unused_share_is_a_watch_item_not_the_bar(tmp_path, capsys):
+    """P3.56 (option (b)): a rail of retrieved, unreferenced sources is marked,
+    not failed; the excerpt-kept share is printed beside it."""
     t = _clean_turn()
     excerpted = [_leg(f"ssi/1904/{i}", excerpt="text") for i in range(1, 4)]
     t["audit"]["sources"] += excerpted        # retrieved, never referenced: 3 of 4 unused
     d = _write(tmp_path, "over", [t])
     rc = rr.main(["--dir", str(d), "rail"])
     out = capsys.readouterr().out
-    assert rc == 1 and "75.0%)*" in out
+    assert rc == 0 and "75.0%)*" in out, out
+    assert "(excerpt): conversational 3 of 3 (100%)" in out
+    assert "(0 fall-back turns, 0 dropped)" in out
 
 
-def test_rail_bar_is_inclusive_at_fifteen_percent(tmp_path, capsys):
+# --- P3.56: a source the report used in its own prose that the answer dropped -------
+
+def test_a_source_named_in_report_prose_and_not_in_the_answer_is_dropped():
+    used = _leg("ssi/1901/3", "The Widget Order 1901", excerpt="text")
+    g = rr.rail_turn(_turn("Nothing else applies.", [used],
+                           reports=("The Widget Order 1901 applies.",)))
+    assert g["sources"][0]["dropped"] is True
+    g = rr.rail_turn(_turn("The Widget Order 1901 applies.", [used],
+                           reports=("The Widget Order 1901 applies.",)))
+    assert g["sources"][0]["dropped"] is False
+
+
+def test_a_references_list_or_a_scope_block_is_not_report_prose():
+    s = _leg("ssi/1901/3", "The Widget Order 1901", excerpt="text")
+    refs = ("Nothing on point.\n\n## References\n* [The Widget Order 1901]"
+            f"({LEG}id/ssi/1901/3)\n")
+    g = rr.rail_turn(_turn("Nothing.", [s], reports=(refs,)))
+    assert g["sources"][0]["dropped"] is False
+    # A heading after the References list closes it.
+    g = rr.rail_turn(_turn("Nothing.", [s], reports=(refs + "## Notes\nThe Widget Order 1901 "
+                                                       "applies.",)))
+    assert g["sources"][0]["dropped"] is True
+    block = ("Nothing on point.\n\n[SEARCH SCOPE — what this research step actually did]\n"
+             "Searched the legislation index for: The Widget Order 1901\n[/SEARCH SCOPE]")
+    g = rr.rail_turn(_turn("Nothing.", [s], reports=(block,)))
+    assert g["sources"][0]["dropped"] is False
+
+
+def test_only_report_turns_carry_dropped_sources():
+    s = _leg("ssi/1901/3", "The Widget Order 1901", excerpt="text")
+    g = rr.rail_turn(_turn("x", [s], reports=("The Widget Order 1901 applies.", "b"), halted=1))
+    assert g["cls"] == "report_mixed" and g["sources"][0]["dropped"] is False
+
+
+def test_rail_fails_on_a_dropped_source_and_lists_it(tmp_path, capsys):
     t = _clean_turn()
-    s = t["audit"]["sources"][0]
-    refs = [_leg(f"ssi/1905/{i}", f"The Cog Order 1905 No {i}") for i in range(1, 17)]
-    t["answer"] += " " + " ".join(f"The Cog Order 1905 No {i}." for i in range(1, 17))
-    t["audit"]["delegations"][0]["report"] = t["answer"]
-    unused = [_leg(f"ssi/1906/{i}", excerpt="text") for i in range(1, 4)]
-    t["audit"]["sources"] = [s] + refs + unused            # 3 of 20 = 15.0%
-    d = _write(tmp_path, "edge", [t])
-    assert rr.main(["--dir", str(d), "rail"]) == 0, capsys.readouterr().out
+    t["audit"]["sources"].append(_leg("ssi/1908/1", "The Sprocket Order 1908", excerpt="text"))
+    t["audit"]["delegations"][0]["report"] += " The Sprocket Order 1908 also applies."
+    d = _write(tmp_path, "dropped", [t])
+    rc = rr.main(["--dir", str(d), "rail", "--drops"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "NOT MET  (0 fall-back turns, 1 dropped)" in out
+    assert "DROPPED" in out and "ssi/1908/1" in out
 
 
 def test_rail_all_and_exclude(tmp_path, capsys):

@@ -69,6 +69,7 @@ from ..utils.search_scope import (
 )
 from ..utils.source_naming import is_legislation, named_in, token_in
 from ..utils import rail_titles
+from ..utils.rail_dedupe import collapse_scheme_duplicates
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -1331,6 +1332,10 @@ async def process_user_request(
     # P4.24: after R, which re-admits change-record instruments titled by id.
     accumulated_sources = await title_rail_sources(
         accumulated_sources, retrieved_sources, retrieved_titles)
+    # P3.56: one entry for a provision reached by an http and an https URL.
+    accumulated_sources, _collapsed = collapse_scheme_duplicates(accumulated_sources)
+    if _collapsed:
+        logger.info("[Manager] Collapsed %d duplicate rail entr(ies)", _collapsed)
 
     if accumulated_sources:
         final["sources"] = [
@@ -1738,6 +1743,10 @@ async def run_deep_research(
     # P4.24, as on the Manager path.
     accumulated_sources = await title_rail_sources(
         accumulated_sources, retrieved_sources, retrieved_titles)
+    # P3.56, as on the Manager path.
+    accumulated_sources, _collapsed = collapse_scheme_duplicates(accumulated_sources)
+    if _collapsed:
+        logger.info("[DeepResearch] Collapsed %d duplicate rail entr(ies)", _collapsed)
 
     if accumulated_sources:
         final["sources"] = [
