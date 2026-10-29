@@ -63,6 +63,7 @@ from ..utils.search_scope import (
     case_law_scope_footer,
     strip_answer_footer,
     incomplete_steps_note,
+    list_coverage_note,
     strip_scope_blocks,
     worker_scope_block,
 )
@@ -1444,8 +1445,13 @@ def build_synthesis_messages(
     steps_count: Optional[int] = None,
     research_mode: str = "legislation_only",
     lost: Optional[list] = None,
+    searches: Optional[list] = None,
 ) -> list:
     """The Deep Research synthesis call's messages, from the steps' findings.
+
+    `searches` (every step's scope record) carries P3.53's list-coverage note:
+    one step may list what a later step searches, so the line is computed over
+    all of them, here, and not in any one step's block. None adds nothing.
 
     `research_mode` picks the system prompt (P4.7): what the research type
     searched and did not, and its report sections. It is a parameter rather
@@ -1479,6 +1485,7 @@ def build_synthesis_messages(
         halts or [], steps_count if steps_count is not None else len(step_findings),
         lost=lost,
     )
+    synthesis_user += list_coverage_note(searches)
     return [
         {"role": "system", "content": get_deep_research_synthesis_prompt(research_mode)},
         {"role": "user", "content": synthesis_user},
@@ -1611,7 +1618,7 @@ async def run_deep_research(
     synthesis_messages = build_synthesis_messages(
         user_query, approved_plan, step_findings, halts, len(steps),
         research_mode=_get_cfg().get("_research_mode") or "legislation_only",
-        lost=lost,
+        lost=lost, searches=all_searches,
     )
 
     async def _no_tools_executor(name: str, args: dict) -> str:

@@ -11058,6 +11058,126 @@ def cmd_rail(args) -> int:
     return 1 if fail else 0
 
 
+# ---------------------------------------------------------------------------
+# P3.53 — `listcov`: a question about which of a listed set has a property
+# ---------------------------------------------------------------------------
+#
+# Applies where the product's own gate fires (`search_scope.list_coverage`, on
+# the scope record rebuilt from the turn's audit): a made-under list of 5 or
+# more, and section searches with one query over 3 or more of its instruments,
+# across every delegation of the turn. M of N searched:
+#   M < N  PASS when the answer or its footer states how many were not checked
+#          and the body asserts nothing of the unchecked ("highly likely to
+#          contain"); the statement may be a count ("the other 33 were not
+#          checked") or "only 4 of the 37".
+#   M = N  PASS when the body states the negative over the rest ("the remaining
+#          19 ... were searched and no instances were found").
+# Validated against Session 51's hand labels (`evidence/seam/s51/p353`).
+_LC_LIKELY = re.compile(
+    r"\b(?:highly |very |most )?likely (?:to )?(?:contain|also|include|feature)"
+    r"|\bprobably (?:contain|also|feature)|\bpresumably\b|\bit is likely that", re.I)
+_LC_NEG = re.compile(
+    r"\b(?:remaining|other)\s+(?:\d+\s+)?[^.\n]{0,80}?(?:do not|did not|does not|no instances"
+    r"|no occurrences|not (?:found|feature|contain)|were not found)"
+    r"|were searched,? and no instances|\bdo not contain the\b"
+    r"|\bno (?:instances|occurrences) of (?:the |a )?[\"'‘’“”]?£", re.I)
+_LC_CHECKED = r"(?:searched|checked|examined|reviewed|queried|individually)"
+
+
+_LC_WORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+             "ten", "eleven", "twelve")
+# M = N, and the answer says the check did not reach it (a lost step: `wave4_p333` 6382 r2,
+# r3, "were not established, as the research steps ... did not return their findings").
+_LC_NOT_DONE = re.compile(
+    r"\bnot (?:been )?(?:established|checked|examined|reviewed)\b|did not return (?:its|their) "
+    r"findings", re.I)
+
+
+def _lc_states_unchecked(text: str, n: int, m: int) -> bool:
+    rest = n - m
+    num = rf"(?:{rest}|{_LC_WORDS[rest]})" if rest < len(_LC_WORDS) else str(rest)
+    pats = (
+        rf"\b{num}\b(?:\s+(?:other|remaining|further))?[^.\n]{{0,80}}?\bnot\b[^.\n]{{0,30}}?"
+        rf"\b{_LC_CHECKED}",
+        rf"\bonly\s+{m}\b[^.\n]{{0,60}}?\b{n}\b",
+        rf"\b{m}\s+(?:of|out of)\s+(?:the\s+|these\s+|those\s+)?{n}\b[^.\n]{{0,100}}?\b{_LC_CHECKED}",
+    )
+    return any(re.search(p, text or "", re.I) for p in pats)
+
+
+def listcov_log(turn: dict) -> list:
+    """The turn's scope record as the product keeps it, rebuilt from the audit:
+    the made-under lists and the section searches, across every delegation."""
+    from src.utils.search_scope import record_enabling_power, record_made_under  # noqa: PLC0415
+    log = []
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            name, a = tl.get("name"), tl.get("args") or {}
+            if name == "get_legislation_text":
+                record_enabling_power(log, name, a, tl.get("raw_result"))
+            elif name == "find_instruments_made_under":
+                raw = str(tl.get("raw_result") or "").lstrip()
+                try:
+                    record_made_under(log, json.JSONDecoder().raw_decode(raw)[0])
+                except Exception:  # noqa: BLE001
+                    continue
+            elif name == "search_legislation_sections":
+                log.append({"tool": name, "query": str(a.get("query") or "")[:200],
+                            "legislation_id": str(a.get("legislation_id") or "")[:60]})
+    return log
+
+
+def listcov_turn(turn: dict) -> Optional[dict]:
+    """None where the gate does not fire; else the coverage and the verdict."""
+    from src.utils.search_scope import list_coverage  # noqa: PLC0415
+    cov = list_coverage(listcov_log(turn))
+    if not cov:
+        return None
+    answer = turn.get("answer") or ""
+    body = _without_footer(answer)
+    n, m = cov["N"], cov["M"]
+    if not body.strip():
+        return dict(cov, verdict="UNANSWERED", why="no body")
+    if m < n:
+        likely = _LC_LIKELY.search(body)
+        stated = _lc_states_unchecked(answer, n, m)
+        if likely:
+            return dict(cov, verdict="FAIL", why=f"asserts of the unchecked: {likely.group(0)!r}")
+        return dict(cov, verdict="PASS" if stated else "FAIL",
+                    why="states the count not checked" if stated else "no count not checked")
+    neg = _LC_NEG.search(body)
+    if neg:
+        return dict(cov, verdict="PASS", why="states the negative")
+    # About the term itself, not P4.5's banner on a lost step (`wave4_p331` 6382 r2).
+    q = cov["query"].casefold()
+    if any(_LC_NOT_DONE.search(s) and q in s.casefold() for s in _sentences(body)):
+        return dict(cov, verdict="PASS", why="says the check did not reach the answer")
+    return dict(cov, verdict="FAIL", why="negative unstated")
+
+
+def cmd_listcov(args) -> int:
+    """P3.53's grader. Exit 1 if any applicable turn fails."""
+    root = Path(args.dir)
+    dirs = sorted(p for p in root.iterdir() if p.is_dir()) if args.all else [root]
+    tally = Counter()
+    for d in dirs:
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")), x.get("rep", 1))):
+            for t in doc.get("turns") or []:
+                g = listcov_turn(t)
+                if not g:
+                    continue
+                branch = "M<N" if g["M"] < g["N"] else "M=N"
+                tally[(branch, g["verdict"])] += 1
+                print(f"  {g['verdict']:<10} {branch} {d.name}/{doc.get('session_id')} "
+                      f"rep{doc.get('rep', 1)} t{t.get('turn')} {t.get('chat_mode') or ''}  "
+                      f"{g['M']} of {g['N']} for \"{g['query']}\"  [{g['why']}]")
+    print(f"\nlistcov (P3.53) over {args.dir}{' (every subdirectory)' if args.all else ''}")
+    for b in ("M<N", "M=N"):
+        print(f"  {b}: PASS {tally[(b, 'PASS')]}, FAIL {tally[(b, 'FAIL')]}, "
+              f"unanswered {tally[(b, 'UNANSWERED')]}")
+    return 1 if tally[("M<N", "FAIL")] + tally[("M=N", "FAIL")] else 0
+
+
 def main(argv: Iterable[str] | None = None) -> int:
     _utf8_stdout()
     p = argparse.ArgumentParser(prog="replay_report")
@@ -11442,6 +11562,12 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="list every source on which the reader and the token test "
                          "disagree, and every unvouched source")
     rl.add_argument("--chars", type=int, default=80)
+    lv = sub.add_parser("listcov",
+                        help="P3.53's grader: where a made-under list was section-searched "
+                             "with one query, the answer states the count not checked (M<N) "
+                             "or the negative over the rest (M=N); exit 1 on a FAIL")
+    lv.add_argument("--all", action="store_true",
+                    help="--dir is the replay ROOT: walk every subdirectory")
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -11480,6 +11606,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "cmcdates": cmd_cmcdates,
         "jurisdiction": cmd_jurisdiction,
         "rail": cmd_rail,
+        "listcov": cmd_listcov,
     }[args.cmd](args)
 
 

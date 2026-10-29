@@ -132,11 +132,53 @@ def _log(flags):
 
 def test_the_limb_counts_and_carries_the_rule():
     limb = ss._made_under_limb(_log([WHOLE, LATER, PART, None]))
+    # P3.48: each class names the listed instruments in it.
     assert ("4 instrument(s) whose own preamble names section 95 of the Widget (Scotland) Act 1901, "
-            "of which legislation.gov.uk records 2 as revoked in whole (1 from a date still to come), "
-            "1 as revoked in part (checked 1906-05-01)") in limb
-    assert limb.endswith("A revocation is stated only as legislation.gov.uk records it; no revocation "
-                         "recorded does not mean in force.")
+            "of which legislation.gov.uk records 2 as revoked in whole (ssi/1901/1 and ssi/1901/2; "
+            "1 from a date still to come: ssi/1901/2), 1 as revoked in part (ssi/1901/3) "
+            "(checked 1906-05-01)") in limb
+    assert ("A revocation is stated only as legislation.gov.uk records it; no revocation "
+            "recorded does not mean in force. Where the answer names one of the instruments named "
+            "above as revoked, it must say against that instrument that the record shows it "
+            "revoked, in whole or in part.") in limb
+
+
+# --- P3.48: the limb names which instruments ----------------------------------
+
+def test_p348_the_limb_names_the_partly_revoked_instruments():
+    """wave4_p333b 6383 t1, t3: the Manager had '8 as revoked in part' and marked none."""
+    limb = ss._made_under_limb(_log([None, PART, None, PART, WHOLE]))
+    assert "1 as revoked in whole (ssi/1901/5)" in limb
+    assert "2 as revoked in part (ssi/1901/2 and ssi/1901/4)" in limb
+    assert "must say against that instrument" in limb
+
+
+def test_p348_a_handful_named_the_rest_counted():
+    limb = ss._made_under_limb(_log([PART] * 11))
+    assert ("11 as revoked in part (ssi/1901/1, ssi/1901/2, ssi/1901/3, ssi/1901/4, ssi/1901/5, "
+            "ssi/1901/6, ssi/1901/7, ssi/1901/8 and 3 more)") in limb
+
+
+def test_p348_a_cut_list_names_only_what_it_lists():
+    # 47 found, 30 revoked in whole; the cut list leads with the 17 not revoked in whole,
+    # so 23 of the 30 are listed: named as "among them", never as all of them.
+    limb = ss._made_under_limb(_log([WHOLE] * 30 + [None] * 15 + [LATER, PART]))
+    assert "31 as revoked in whole (among them ssi/1901/46, ssi/1901/1," in limb
+    assert "1 as revoked in part (ssi/1901/47)" in limb
+
+
+def test_p348_no_revocation_reads_exactly_as_before():
+    log = _log([None, None, None])
+    limb = ss._made_under_limb(log)
+    assert "0 as revoked in whole, 0 as revoked in part (checked 1906-05-01)" in limb
+    assert limb.endswith("no revocation recorded does not mean in force.")
+    assert "must say against" not in limb
+    # and the limb from an entry recorded before P3.48 (no ids) is unchanged
+    old = [dict(e) for e in _log([WHOLE, PART])]
+    for e in old:
+        e.pop("revoked_ids", None)
+    assert ss._made_under_limb(old).endswith("does not mean in force.")
+    assert "(ssi/1901/" not in ss._made_under_limb(old)
 
 
 def test_the_footer_names_the_day_checked():
