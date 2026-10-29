@@ -64,7 +64,7 @@ Summaries (P3.47):
   summariser had been adding well-known cases from memory, which then read
   as if they had been found.
 
-Research results (P1.7, in progress):
+Research results (P1.7):
 - The research model now sees everything the system adds to a search or
   lookup result. With the model in use (Gemini, through OpenRouter), any
   text placed beside the structured part of a result was silently dropped

@@ -9992,3 +9992,34 @@ P1 the target lacks).
   `p37r_6383` $0.42, $0.35, $0.81 and $0.87, $0.44, $0.18; 6410 $0.15, $0.25, $0.14.
 - **An untracked `docs/deployment/PARLICHAT_COHOSTING_PLAN.md`** is still in the tree, not this work's; left
   untouched and unstaged.
+
+## Session 51 — 2026-10-29 — P1.7 done on its regression panel; the SPA traversal fixed on `main` ($9.11)
+
+- **On `main`, outside the plan: the SPA path traversal fixed** (`2e7811d`, pushed). `serve_frontend` serves a
+  file only if its resolved path lies inside `client/dist`; 18 tests in `tests/test_spa_traversal.py`, 5 of
+  which fail on the old code; full suite 3,983 on `main`. The fix had been written by an earlier session in the
+  `F:/LexChat-worktrees/spa-traversal` worktree and left uncommitted; reviewed, rebased on `origin/main`,
+  committed. Still the user's, on the target: pull and restart, check the HTTP logs for `..`, `%2e`, `%5c`,
+  `/C:`, set a real `JWT_SECRET`. This branch does not carry it yet (its `main.py` is identical, so the next
+  cut merges cleanly).
+- **P1.7's regression panel (user-agreed, cap $12.00): `wave5_p17`, $9.11** (served by `040287f`): 6335,
+  6340, 6341, 6345, 6348, 6374, 6375, 6382 at n=1. Before-column: each session's latest stored plain-id run
+  (`wave5_p312`, `wave4_p333`, `wave0_conv`, `wave4_b2_post`, `wave3_p313c`, `wave4_b9_sweep1`,
+  `wave4_b12_p320`, `wave4_p333b`), copied to `evidence/seam/s51/panel_before`; every `replay_report`
+  subcommand run over both (`seam/s51/grade_all.sh`, `grade_all_before.txt`, `grade_all_wave5_p17.txt`). No
+  failure attributable to the wrap. Four graders pass where the stored column failed (`caselaw`, `modes`,
+  `deadend`, `stance`): the age of that column, not P1.7. `scts` exits 1 with the setting off. **P1.7 ticked
+  (user decision).**
+- **One signal, booked to P3.53 (user decision):** `rail` unused 13.3% to 23.2%, mostly 6382 (Deep Research,
+  0 of 31 to 23 of 52). The answer lists 19 of the 37 s.95 instruments as containing '£' (with SSI 2025/282 and
+  2026/170, read from legislation.gov.uk) but no longer says the other 18 do not, and it shows the legal
+  professional a step 'Discrepancy note'.
+- **Sweep:** `replay check`, `replay pin`; uvicorn (PID 3192, then 928 after the pin) and the keep-awake helper
+  (9308) by `Start-Process -PassThru`; `replay restore`; all stopped, port 8000 free, no pin file.
+- **Folded:** FIX_PLAN (P1.7 ticked, P3.53 extended, a new top order line; `plan_lint` 0; `plan_status` 76 of
+  110, 5 in progress, 8 of 14); CHANGELOG *Unreleased*; CLAUDE.md; memory.
+- **Spend: $9.11** (the sweep; the preflight probe under $0.01).
+
+**Take next:** P3.46's acceptance (6359 and 6363 n=3, cap $17.00), priced to the user; then P3.53, P3.54,
+P3.34, P3.28's instruction, P3.48, and the re-measure of P3.51, P3.52 and P3.50 on top of P1.7. **The user's:**
+the next cut (the target lacks P1.7 and, on `main`, the traversal fix), the Fix Tracker (v54).
