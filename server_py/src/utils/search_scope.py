@@ -1018,21 +1018,25 @@ def _commencement_dates(d: dict) -> dict:
     """
     cd = d.get("commencement_dates") if isinstance(d, dict) else None
     out = {"status": None, "dated": 0, "relations": 0, "reason": None,
-           "refused": [], "unchecked": [], "window": None}
+           "refused": [], "unchecked": [], "window": None, "later": 0}
     if not isinstance(cd, dict):
         return out
     out["status"] = cd.get("status")
     out["reason"] = cd.get("reason")
-    entries = 0
+    entries = later = 0
     for g in d.get("related") or []:
         if not isinstance(g, dict) or g.get("self"):
             continue
         for c in g.get("changes") or []:
             if isinstance(c, dict) and c.get("in_force"):
                 entries += 1
+                # P3.54: a date after the request's date, marked by the hop.
+                if c.get("date_still_to_come") is True:
+                    later += len(c.get("changed") or []) or 1
     if out["status"] == "retrieved" and entries:
         out["dated"] = cd.get("dated") if isinstance(cd.get("dated"), int) else entries
         out["relations"] = cd.get("relations") if isinstance(cd.get("relations"), int) else 0
+        out["later"] = later
     for key, name in (("refused_instruments", "refused"), ("made_date_not_read", "unchecked")):
         v = cd.get(key)
         if isinstance(v, list):
@@ -1050,6 +1054,28 @@ def _some(ids: list, k: int = 6) -> str:
     return ", ".join(ids[:k]) + (f" and {more} more" if more > 0 else "")
 
 
+# P3.54: gated on an entry the hop marked `date_still_to_come` (its `in_force`
+# is after the request's date), as P3.33's CURRENCY block treats a revocation
+# dated after today. Absent, every text below is byte-identical.
+_LATER_WORKER = (
+    " `date_still_to_come` is set on {n} of those dated relation(s): the date is "
+    "after today's date and has not been reached. For each, say that the "
+    "instrument named against it brings those provisions into force on that "
+    "date, so they are due to come into force then, and not that it has brought "
+    "them into force or that they came into force on it."
+)
+_LATER_LIMB = (
+    " At least one of those dates, for {ids}, is after today's date and has not "
+    "been reached: state such a date only as the date the provision is due to "
+    "come into force, never as one on which the instrument brought it into force."
+)
+_LATER_LINE = (
+    " A date given against a listed provision that is after today's date has not "
+    "been reached: that provision is due to come into force on that date, so do "
+    "not state it as commenced."
+)
+
+
 def _dated_closing(lid: str, hop: dict) -> str:
     """The Worker-facing closing of a change record the hop dated (P3.21)."""
     bits = [
@@ -1065,6 +1091,8 @@ def _dated_closing(lid: str, hop: dict) -> str:
         "never evidence of in-force status today. Do not give a date for a "
         "relation listed without `in_force`."
     ]
+    if hop["later"]:
+        bits.append(_LATER_WORKER.format(n=hop["later"]))
     if hop["refused"]:
         bits.append(
             f" For relations made by {_some(hop['refused'])} no date is given: "
@@ -1260,6 +1288,9 @@ def record_relations(log: Optional[list], name: str, args: dict, data: Any) -> N
             # P3.21: how many listed commencements code dated (0 where no hop
             # ran or it dated none), for `_relations_limb` and the footer.
             "dated": hop["dated"],
+            # P3.54: how many of those are dated after today; only where some
+            # are, so the entry is otherwise unchanged.
+            **({"later": hop["later"]} if hop["later"] else {}),
         })
     except Exception:
         pass
@@ -1345,6 +1376,13 @@ def _relations_limb(log: Optional[list]) -> str:
             "any other commencement date, or an enabling power, from the change "
             "record."
         )
+        later = []
+        for e in rows:
+            lid = e.get("legislation_id") or ""
+            if e.get("later") and lid and lid not in later:
+                later.append(lid)
+        if later:
+            parts.append(_LATER_LIMB.format(ids=", ".join(later[:8])))
         return "".join(parts)
     parts.append(
         " The change record carries no dates and no made-under relation: do not "
@@ -1412,8 +1450,11 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
             "; those records carry no dates of their own, so a commencement date "
             "given above for a provision commenced by another instrument is the "
             f"date {_DATE_RECORD} gives for that commencement, read through the LEX "
-            "API, with its qualification. It says when the provision was brought "
-            "into force, not whether it has been amended or repealed since; any "
+            "API, with its qualification. It says when the provision was "
+            + ("brought into force, or, for a date after today, when it is due to "
+               "come into force, " if any(e.get("later") for e in rows)
+               else "brought into force, ")
+            + "not whether it has been amended or repealed since; any "
             "other date was read from the instrument itself."
         )
     elif any_found:
@@ -1856,6 +1897,9 @@ def record_currency(log: Optional[list], name: str, args: dict, data: Any) -> No
                 # P3.21: how many of those code dated (0 where no hop ran or it
                 # dated none), for the line and the currency footer clause.
                 "dated": _commencement_dates(d)["dated"],
+                # P3.54: how many of those are dated after today, only where some are.
+                **({"later": _commencement_dates(d)["later"]}
+                   if _commencement_dates(d)["later"] else {}),
             })
         elif name == "get_legislation_text":
             # `_text_record` returns the `{legislation, full_text}` wrapper, and
@@ -1938,7 +1982,7 @@ def _commencement_line(lid: str, case: str, e: dict) -> str:
                 f"by another instrument, all listed. {_DATED_LISTED}; one of its "
                 "provisions not listed there may be called not recorded as "
                 "commenced, citing this record, without a date."
-            )
+            ) + (_LATER_LINE if e.get("later") else "")
         return (
             f"{lid}: {e.get('commenced_by_other')} commencement relation(s) made by "
             "another instrument, all listed. A provision listed there may be stated "
@@ -1953,7 +1997,7 @@ def _commencement_line(lid: str, case: str, e: dict) -> str:
                 f"recorded, but not all are listed. {_DATED_LISTED}; one not listed "
                 "may be in the part not shown, so do not state whether it has been "
                 "commenced."
-            )
+            ) + (_LATER_LINE if e.get("later") else "")
         return (
             f"{lid}: commencement relations made by another instrument are "
             "recorded, but not all are listed. A provision listed there may be "
@@ -2016,6 +2060,7 @@ def _commencement_lines(rows: list) -> str:
     by_commenced: dict = {}
     order: list = []
     dated: set = set()
+    later: set = set()
     for e in rows:
         if e.get("kind") != "relations":
             continue
@@ -2030,11 +2075,14 @@ def _commencement_lines(rows: list) -> str:
             # calls keeps the date wording, whichever call ranks best.
             if e.get("dated"):
                 dated.add(lid)
+            if e.get("later"):
+                later.add(lid)
             if lid not in to_best or _CASE_RANK.index(case) < _CASE_RANK.index(to_best[lid][0]):
                 to_best[lid] = (case, e)
     for lid in dated:
         case, e = to_best[lid]
-        to_best[lid] = (case, {**e, "dated": e.get("dated") or 1})
+        to_best[lid] = (case, {**e, "dated": e.get("dated") or 1,
+                               **({"later": e.get("later") or 1} if lid in later else {})})
     if not order:
         return (
             " Commencement: this step consulted no change record, so do not state "
