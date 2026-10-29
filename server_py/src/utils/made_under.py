@@ -475,6 +475,11 @@ def revocation_note(d: dict) -> str:
     )
 
 
+# P3.53: the made-under block's note on a list question, from this many listed
+# (`search_scope.LIST_COVERAGE_MIN_LISTED`, the scope line's gate).
+LIST_NOTE_MIN = 5
+
+
 def made_under_note(raw_result) -> str:
     r"""The block appended to a `find_instruments_made_under` result.
 
@@ -500,11 +505,15 @@ def made_under_note(raw_result) -> str:
         n, listed = int(d.get("count") or 0), len(d.get("instruments") or [])
         more = (f" Only {listed} of the {n} are listed here; say how many there are, and "
                 "that the list shown is not all of them.") if listed < n else ""
+        # P3.53: a question about which of the listed instruments has a
+        # property was answered from 2-8 of 37 (`search_scope.list_coverage`).
+        each = (f" {listed} listed; if the question asks which of them have a property, "
+                "search each or say which you did not.") if listed >= LIST_NOTE_MIN else ""
         return (
             f"\n\n[ENABLING POWER — the made-under record: each instrument listed above "
             f"has its own preamble naming {prov} of the {act} as a power it was made "
             f"under ({n} instrument(s)). You MAY state that each of them was made under "
-            f"that provision, citing the instrument.{more} The record covers {cov} It "
+            f"that provision, citing the instrument.{more}{each} The record covers {cov} It "
             "does NOT establish that no other instrument was made under the provision: "
             "outside its coverage nothing was checked, so state the coverage rather "
             "than a total.]"

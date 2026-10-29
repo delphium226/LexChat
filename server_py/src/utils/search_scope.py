@@ -110,6 +110,7 @@ __all__ = [
     "carried_scope_footer",
     "strip_answer_footer",
     "incomplete_steps_note",
+    "list_coverage_note",
     "CASE_LAW_COVERAGE_SENTENCE",
     "CASE_LAW_DOCTRINE_SENTENCE",
     "CASE_LAW_ABSENCE_SENTENCE",
@@ -793,8 +794,12 @@ def record_enabling_power(log: Optional[list], name: str, args: dict, data: Any)
         if not record or record.get("error"):
             return
         stated = (name == "get_legislation_text") and bool(_recital_in(record))
-        log.append({"tool": "enabling_power", "legislation_id": lid[:60],
-                    "stated": stated})
+        entry = {"tool": "enabling_power", "legislation_id": lid[:60], "stated": stated}
+        if name == "get_legislation_text":
+            # P3.53: a whole text read checks the instrument for any term
+            # (`list_coverage`). Read by nothing that renders.
+            entry["text_read"] = True
+        log.append(entry)
     except Exception:
         pass
 
@@ -878,6 +883,10 @@ def record_made_under(log: Optional[list], data: Any) -> None:
             "listed": len(d.get("instruments") or []),
             "coverage": str((d.get("coverage") or {}).get("label") or "")[:200],
         }
+        # P3.53: the ids listed, so `list_coverage` can set the section
+        # searches that followed against the list.
+        entry["ids"] = [str(i.get("legislation_id") or "")[:60]
+                        for i in d.get("instruments") or [] if i.get("legislation_id")]
         # P3.33: legislation.gov.uk's recorded revocations, counted over every
         # instrument found, with the day they were checked.
         rv = d.get("revocations")
@@ -885,6 +894,20 @@ def record_made_under(log: Optional[list], data: Any) -> None:
             entry["revocations"] = {k: rv.get(k) for k in (
                 "revoked", "revoked_undated", "revoked_later", "partly", "qualified",
                 "none", "unchecked", "checked")}
+            # P3.48: which LISTED instruments those are, so the limb names
+            # them; the counts above still cover every instrument found.
+            named = {"whole": [], "later": [], "partly": []}
+            for i in d.get("instruments") or []:
+                lid, st = str(i.get("legislation_id") or "")[:60], i.get("revocation_status")
+                if not lid:
+                    continue
+                if st in ("revoked", "revoked_undated", "revoked_later"):
+                    named["whole"].append(lid)
+                if st == "revoked_later":
+                    named["later"].append(lid)
+                if st == "partly":
+                    named["partly"].append(lid)
+            entry["revoked_ids"] = named
         log.append(entry)
     except Exception:
         pass
@@ -901,12 +924,19 @@ def _made_under_limb(log: Optional[list]) -> str:
             listed = (f", {e.get('listed')} of them listed" if e.get("listed", 0) < e.get("count", 0)
                       else "")
             parts.append(f"{e.get('count')} instrument(s) whose own preamble names {prov} of "
-                         f"the {e.get('act')}{listed}" + _revocation_limb(e.get("revocations")))
+                         f"the {e.get('act')}{listed}"
+                         + _revocation_limb(e.get("revocations"), e.get("revoked_ids")))
         else:
             parts.append(f"none whose preamble names {prov} of the {e.get('act')}")
     cov = rows[-1].get("coverage") or "a stated class of instruments"
     rule = (" A revocation is stated only as legislation.gov.uk records it; no revocation "
             "recorded does not mean in force." if any(e.get("revocations") for e in rows) else "")
+    # P3.48: only where the limb names an instrument, so a list with no
+    # revocation recorded reads exactly as before.
+    if any(_revoked_named(e) for e in rows if e.get("revocations")):
+        rule += (" Where the answer names one of the instruments named above as revoked, "
+                 "it must say against that instrument that the record shows it revoked, "
+                 "in whole or in part.")
     return (
         "Made-under record consulted: " + "; ".join(parts) + f". It covers {cov} only; "
         "instruments outside that coverage were not checked, so give the coverage, "
@@ -914,14 +944,50 @@ def _made_under_limb(log: Optional[list]) -> str:
     )
 
 
-def _revocation_limb(rv: Optional[dict]) -> str:
-    """P3.33: ", of which legislation.gov.uk records R as revoked in whole ... (checked D)"."""
+# P3.48: how many ids the limb names in each revocation class; the rest are
+# counted. The Manager writes a short conversational list from this limb, and
+# with counts alone it marked no partly revoked instrument (6383 t1, t3,
+# `wave4_p333b`, 3 of 3).
+_REVOKED_NAMED = 8
+
+
+def _revoked_named(e: dict) -> bool:
+    named = e.get("revoked_ids") or {}
+    return bool(named.get("whole") or named.get("partly"))
+
+
+def _named_ids(ids: list, count: int) -> str:
+    """P3.48: "a, b and c", "a, b, c, d, e and 3 more", or "among them a and b"
+    where the list was cut and fewer are listed than the count. "" for none."""
+    ids = [i for i in dict.fromkeys(ids or []) if i]
+    if not ids:
+        return ""
+    if len(ids) > _REVOKED_NAMED:
+        shown = ", ".join(ids[:_REVOKED_NAMED]) + f" and {len(ids) - _REVOKED_NAMED} more"
+    else:
+        shown = _and_join(ids)
+    return ("among them " if len(ids) < count else "") + shown
+
+
+def _revocation_limb(rv: Optional[dict], named: Optional[dict] = None) -> str:
+    """P3.33: ", of which legislation.gov.uk records R as revoked in whole ... (checked D)".
+
+    P3.48: with `named` (the listed ids per class, `record_made_under`), each
+    class with any listed instrument names them; without, exactly as before."""
     if not isinstance(rv, dict) or not rv.get("checked"):
         return ""
+    named = named if isinstance(named, dict) else {}
     whole = sum(int(rv.get(k) or 0) for k in ("revoked", "revoked_undated", "revoked_later"))
     later = int(rv.get("revoked_later") or 0)
-    bits = [f"{whole} as revoked in whole" + (f" ({later} from a date still to come)" if later else ""),
-            f"{int(rv.get('partly') or 0)} as revoked in part"]
+    partly = int(rv.get("partly") or 0)
+    whole_ids = _named_ids(named.get("whole"), whole)
+    part_ids = _named_ids(named.get("partly"), partly)
+    later_ids = _named_ids(named.get("later"), later) if whole_ids else ""
+    later_bit = (f"{later} from a date still to come" + (f": {later_ids}" if later_ids else "")
+                 if later else "")
+    whole_paren = "; ".join(x for x in (whole_ids, later_bit) if x)
+    bits = [f"{whole} as revoked in whole" + (f" ({whole_paren})" if whole_paren else ""),
+            f"{partly} as revoked in part" + (f" ({part_ids})" if part_ids else "")]
     if rv.get("qualified"):
         bits.append(f"{rv['qualified']} with a qualified removal only")
     return f", of which legislation.gov.uk records {', '.join(bits)} (checked {rv['checked']})"
@@ -938,8 +1004,146 @@ def _made_under_footer_clause(entries: Optional[list]) -> str:
                "instrument still has effect." if checked else "")
     return (
         f" The record of enabling powers consulted here covers {cov}; anything "
-        "outside that coverage was not checked." + revoked
+        "outside that coverage was not checked." + revoked + _list_coverage_footer(entries)
     )
+
+
+# ---------------------------------------------------------------------------
+# P3.53 — a question about which of a listed set has a property
+# ---------------------------------------------------------------------------
+#
+# 6383 t1 asks which of the 37 instruments made under s.95 contain '£'. Where
+# the Manager's brief read "find SSIs ... that contain '£'", the quick-lookup
+# Worker searched 2-8 of the 37 (13 of 13 stored runs) and the answer sampled,
+# read as complete, or said the rest were "highly likely" to contain it; where
+# it read "for the instruments found, check their text", it searched all 37 (4
+# of 5). The scope record held both numbers, and nothing said them: the footer
+# named the instruments searched, never the list they were drawn from
+# (`evidence/seam/s51/p353`). So code sets the list against the searches.
+#
+# The gate is structural: a made-under list of at least five, and section
+# searches with ONE query over at least two of its instruments (a filter put
+# to the list, not a look at one instrument). A turn without both is untouched.
+# No Manager prompt rule, deliberately (P3.13's precedent: a rule moved the
+# Manager's first brief).
+LIST_COVERAGE_MIN_LISTED = 5
+LIST_COVERAGE_MIN_SEARCHED = 2
+_LIST_COVERAGE_NAMED = 8
+_LIST_ID = re.compile(r"^(?:https?://(?:www\.)?legislation\.gov\.uk/)?(?:id/)?([a-z]+/\d{4}/\d+)")
+
+
+def _list_id(x: Any) -> str:
+    m = _LIST_ID.match(str(x or "").strip())
+    return m.group(1) if m else ""
+
+
+def _query_key(q: Any) -> str:
+    q = re.sub(r"\s+", " ", str(q or "")).strip().strip("\"'‘’“”").strip()
+    return q.casefold()
+
+
+def list_coverage(entries: Optional[list]) -> Optional[dict]:
+    """`{"N", "M", "query", "unsearched"}` where the gate above holds, else None.
+
+    Over every made-under list in `entries` (each distinct list once; P3.51's
+    family entries carry no `ids` and are not lists the Worker was handed),
+    and every query its instruments were section-searched with; the pair
+    covering the most instruments wins. Never raises."""
+    try:
+        lists, seen = [], set()
+        for e in entries or []:
+            if (e.get("tool") != MADE_UNDER_ENTRY or e.get("status") != "found"
+                    or not isinstance(e.get("ids"), list)):
+                continue
+            ids = [i for i in dict.fromkeys(_list_id(x) for x in e["ids"]) if i]
+            if len(ids) >= LIST_COVERAGE_MIN_LISTED and frozenset(ids) not in seen:
+                seen.add(frozenset(ids))
+                lists.append(ids)
+        if not lists:
+            return None
+        searched, read = {}, set()
+        for e in entries or []:
+            if e.get("tool") == "enabling_power" and e.get("text_read"):
+                read.add(_list_id(e.get("legislation_id")))
+            if e.get("tool") != "search_legislation_sections":
+                continue
+            key, lid = _query_key(e.get("query")), _list_id(e.get("legislation_id"))
+            if key and lid:
+                searched.setdefault(key, [str(e.get("query") or "").strip(), set()])[1].add(lid)
+        best = None
+        for ids in lists:
+            for shown, done in searched.values():
+                if len(set(ids) & done) < LIST_COVERAGE_MIN_SEARCHED:
+                    continue
+                # A whole text read checked the instrument too (6382,
+                # `wave4_p331` r1: 14 searched, all 37 read).
+                checked = done | read
+                m = len(set(ids) & checked)
+                if best is None or (m, len(ids)) > (best["M"], best["N"]):
+                    best = {"N": len(ids), "M": m, "query": shown,
+                            "unsearched": [i for i in ids if i not in checked]}
+        if best:
+            q = best["query"].strip("\"'‘’“” ")
+            best["query"] = q.replace('"', "'").replace("[", "(").replace("]", ")")[:80]
+        return best
+    except Exception:
+        return None
+
+
+def _list_coverage_text(cov: dict, who: str) -> str:
+    """The sentences shared by the Worker's scope block and the synthesis note."""
+    n, m, q = cov["N"], cov["M"], cov["query"]
+    if m < n:
+        rest = n - m
+        were, those, contain = ("was", "that one", "contains") if rest == 1 else (
+            "were", f"those {rest}", "contain")
+        return (
+            f"the made-under record listed {n} instruments, and {who} searched {m} of them "
+            f'for "{q}". The other {rest} {were} NOT searched for it '
+            f"({_and_more(cov['unsearched'], _LIST_COVERAGE_NAMED)}). If the answer says which "
+            f'of the listed instruments contain or match "{q}", it MUST say that {rest} of the '
+            f"{n} {were} not checked, and say nothing of what {those} {contain}."
+        )
+    return (
+        f"the made-under record listed {n} instruments, and {who} searched every one of them "
+        f'for "{q}". If the answer names those in which it was found, it MUST also say that '
+        f'the other listed instruments were searched and "{q}" was not found in the text '
+        "returned."
+    )
+
+
+def _list_coverage_limb(log: Optional[list], cfg: Optional[dict] = None) -> str:
+    """P3.53's line in the Worker's scope block. "" in Deep Research, where a
+    step may search what an earlier step listed: there the synthesis gets the
+    line once, over every step (`list_coverage_note`)."""
+    if (cfg or {}).get("_chat_mode") == "deep_research":
+        return ""
+    cov = list_coverage(log)
+    return ("List coverage: " + _list_coverage_text(cov, "this step")) if cov else ""
+
+
+def list_coverage_note(entries: Optional[list]) -> str:
+    """P3.53, for the Deep Research synthesis: the same line over every step's
+    searches. A SEARCH SCOPE block by name with no brackets inside, so
+    `strip_scope_blocks` removes it whole if the synthesis copies it."""
+    cov = list_coverage(entries)
+    if not cov:
+        return ""
+    return ("\n\n[SEARCH SCOPE — list coverage, across every step: "
+            + _list_coverage_text(cov, "this research") + "]")
+
+
+def _list_coverage_footer(entries: Optional[list]) -> str:
+    """P3.53's sentence for the legal professional, where some of the list was
+    not searched. "" otherwise."""
+    cov = list_coverage(entries)
+    if not cov or cov["M"] >= cov["N"]:
+        return ""
+    rest = cov["N"] - cov["M"]
+    return (f" Of the {cov['N']} instruments the made-under record lists, {cov['M']} were "
+            f"searched for \"{cov['query']}\"; the other {rest} "
+            f"{'was' if rest == 1 else 'were'} not checked.")
+
 
 # ---------------------------------------------------------------------------
 # B3 — the relationship, retrieved (FIX_PLAN P3.5)
@@ -2951,6 +3155,10 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _made_under = _made_under_limb(log)
     if _made_under:
         lines.append(_made_under)
+    # P3.53: straight after the list it qualifies.
+    _list_cov = _list_coverage_limb(log, cfg)
+    if _list_cov:
+        lines.append(_list_cov)
     # P3.5 (B3). Same reason again, and it is the sharpest case of it: the
     # sentence "no commencement regulations have been made" is written by the
     # Manager or the DR synthesis, neither of which has seen the change record
