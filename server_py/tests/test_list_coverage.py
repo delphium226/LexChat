@@ -3,7 +3,7 @@
 6383 t1 asks which of the 37 instruments made under s.95 contain '£'; the
 quick-lookup Worker searched 2-8 of them and the answer sampled, read as
 complete, or said the rest were "highly likely" to contain it. Pins: the gate
-(a made-under list of 5 or more, section searches with one query over 3 or
+(a made-under list of 5 or more, section searches with one query over 2 or
 more of its instruments), the Worker's scope-block line in both branches, the
 Deep Research note (computed over every step, absent from each step's block),
 the footer sentence, the made-under block's note, byte-identical output when
@@ -58,13 +58,18 @@ def test_fires_on_a_list_of_five_searched_three_times_with_one_query():
     assert cov == {"N": 5, "M": 3, "query": "£", "unsearched": ["ssi/1901/4", "ssi/1901/5"]}
 
 
-@pytest.mark.parametrize("n,searched", [(4, (1, 2, 3, 4)), (10, (1, 2)), (10, ())])
+def test_fires_on_two_searched_with_one_query():
+    """The gate is 2 (user decision, Session 51): 4 of the 13 stored runs searched only two."""
+    assert ss.list_coverage(_log(10, (1, 2)))["M"] == 2
+
+
+@pytest.mark.parametrize("n,searched", [(4, (1, 2, 3, 4)), (10, (1,)), (10, ())])
 def test_does_not_fire_below_the_gate(n, searched):
     assert ss.list_coverage(_log(n, searched)) is None
 
 
 def test_different_queries_are_not_pooled():
-    log = _log(10, (1, 2))
+    log = _log(10, (1,))
     ss.record_search(log, "search_legislation_sections",
                      {"legislation_id": "ssi/1901/3", "query": "penalty"}, {"results": []})
     assert ss.list_coverage(log) is None
@@ -79,7 +84,7 @@ def test_quotes_case_and_spacing_do_not_split_one_query():
 
 
 def test_searches_outside_the_list_do_not_count():
-    log = _log(10, (1, 2))
+    log = _log(10, (1,))
     ss.record_search(log, "search_legislation_sections",
                      {"legislation_id": "ssi/1999/1", "query": "£"}, {"results": []})
     assert ss.list_coverage(log) is None
@@ -129,7 +134,7 @@ def test_the_unsearched_ids_are_capped():
     assert "ssi/1901/11 and 26 more)" in block
 
 
-@pytest.mark.parametrize("n,searched", [(4, (1, 2, 3, 4)), (10, (1, 2)), (10, ())])
+@pytest.mark.parametrize("n,searched", [(4, (1, 2, 3, 4)), (10, (1,)), (10, ())])
 def test_byte_identical_when_the_gate_does_not_fire(n, searched):
     log = _log(n, searched)
     assert ss.worker_scope_block(log, {}) == ss.worker_scope_block(_without_ids(log), {})
@@ -163,7 +168,7 @@ def test_the_synthesis_gets_one_note_over_every_step():
     assert note.count("[") == 1 and note.count("]") == 1
     text, n = ss.strip_scope_blocks("The report." + note)
     assert text.strip() == "The report." and n == 1
-    assert ss.list_coverage_note(_log(10, (1, 2))) == ""
+    assert ss.list_coverage_note(_log(10, (1,))) == ""
 
 
 def test_build_synthesis_messages_carries_the_note_only_when_given_the_searches():
@@ -228,7 +233,7 @@ def _turn(n, searched, answer):
 
 def test_listcov_grades_both_branches():
     from tools.replay_report import listcov_turn
-    assert listcov_turn(_turn(10, (1, 2), "x")) is None
+    assert listcov_turn(_turn(10, (1,), "x")) is None
     assert listcov_turn(_turn(10, (1, 2, 3), "Three contain it."))["verdict"] == "FAIL"
     assert listcov_turn(_turn(10, (1, 2, 3), "Three contain it; the other 7 were not checked."
                               ))["verdict"] == "PASS"

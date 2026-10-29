@@ -1022,12 +1022,12 @@ def _made_under_footer_clause(entries: Optional[list]) -> str:
 # (`evidence/seam/s51/p353`). So code sets the list against the searches.
 #
 # The gate is structural: a made-under list of at least five, and section
-# searches with ONE query over at least three of its instruments (a filter put
+# searches with ONE query over at least two of its instruments (a filter put
 # to the list, not a look at one instrument). A turn without both is untouched.
 # No Manager prompt rule, deliberately (P3.13's precedent: a rule moved the
 # Manager's first brief).
 LIST_COVERAGE_MIN_LISTED = 5
-LIST_COVERAGE_MIN_SEARCHED = 3
+LIST_COVERAGE_MIN_SEARCHED = 2
 _LIST_COVERAGE_NAMED = 8
 _LIST_ID = re.compile(r"^(?:https?://(?:www\.)?legislation\.gov\.uk/)?(?:id/)?([a-z]+/\d{4}/\d+)")
 

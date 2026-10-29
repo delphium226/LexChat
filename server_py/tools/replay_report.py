@@ -11117,7 +11117,7 @@ def cmd_rail(args) -> int:
 #
 # Applies where the product's own gate fires (`search_scope.list_coverage`, on
 # the scope record rebuilt from the turn's audit): a made-under list of 5 or
-# more, and section searches with one query over 3 or more of its instruments,
+# more, and section searches with one query over 2 or more of its instruments,
 # across every delegation of the turn. M of N searched:
 #   M < N  PASS when the answer or its footer states how many were not checked
 #          and the body asserts nothing of the unchecked ("highly likely to
