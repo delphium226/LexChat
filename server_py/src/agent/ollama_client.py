@@ -70,6 +70,7 @@ async def chat_loop(
     worker_call: bool = False,
     manager_call: bool = False,
     manager_report_in_hand: Optional[Callable[[], bool]] = None,
+    results_bounded: bool = False,
 ) -> dict:
     """Core ReAct loop: stream from Ollama, handle tool calls, recurse.
 
@@ -80,6 +81,10 @@ async def chat_loop(
     `manager_call` (P4.12): while `manager_report_in_hand()` says a usable
     worker report is in hand, a heavy empty is not retried and an idle timeout
     is retried once, not twice, as in the OpenRouter loop. No cap, as above.
+
+    `results_bounded` (P1.8): the executor bounds its own results
+    (`run_worker_tool`), so the last-resort cap is skipped, as in the
+    OpenRouter loop.
 
     Args:
         messages: Conversation history.
@@ -328,9 +333,9 @@ async def chat_loop(
 
         next_messages = [*messages, message]
 
-        # Last-resort safety net (`cap_tool_result`): results above the
-        # summarisation threshold are summarised (and capped) by
-        # run_worker_tool before reaching here; per tool since P3.50.
+        # Last-resort safety net (`cap_tool_result`), per tool since P3.50;
+        # skipped for an executor that bounds its own results (P1.8:
+        # `results_bounded`, the Worker's loop, via run_worker_tool).
         from .provider_factory import cap_tool_result
 
         # Execute all tool calls concurrently — they are independent of each
@@ -342,7 +347,10 @@ async def chat_loop(
             func_name = tc["function"]["name"]
             func_args = tc["function"]["arguments"]
             result = await tool_executor(func_name, func_args)
-            result = cap_tool_result(func_name, result, timing_collector, "[ChatLoop]")
+            # P1.8: a Worker's results are bounded by `run_worker_tool`, on
+            # the tool's own output; cut here, the cut fell on code text.
+            if not results_bounded:
+                result = cap_tool_result(func_name, result, timing_collector, "[ChatLoop]")
             return func_name, result
 
         # P2.7: each task copies this context at creation, so every call in
@@ -387,6 +395,7 @@ async def chat_loop(
             worker_call=worker_call,
             manager_call=manager_call,
             manager_report_in_hand=manager_report_in_hand,
+            results_bounded=results_bounded,
         )
 
     return message
