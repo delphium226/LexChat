@@ -18,7 +18,11 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-On `fix/prepilot-defects` since 2026.10.4, waiting for the next cut.
+## 2026.10.5 — 2026-10-30
+
+Eighth cut (merge `471468b`): the pre-pilot fixes from Sessions 47 to 51
+(P3.49 to P3.56, P1.7, P3.12, P3.38, P3.46, P3.47), the SPA traversal fix and
+the Deep Research planner's error wording. Rollback point: `v2026.10.4`.
 
 Security (on `main`, outside the fix plan):
 - The web server no longer serves files from outside the built frontend. A

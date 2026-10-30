@@ -11,6 +11,11 @@ import Modal from './ui/Modal';
 
 const RELEASES = [
   [
+    '2026.10.5',
+    '30 October 2026',
+    'Notes on what a search could not show now reach the research; lists say how many were checked; future commencement dates, pre-1963 legislation and missed judgments stated accurately',
+  ],
+  [
     '2026.10.4',
     '12 October 2026',
     'A switch for administrators to turn on Scottish judgments once the network allows it; no change to answers',
@@ -61,7 +66,7 @@ function LegislationNotes({ botName, scottishJudgments }) {
   return (
     <>
       <p>
-        Since the pre-pilot ended in August, {botName} has been improved in seven releases, from 22 September to 12
+        Since the pre-pilot ended in August, {botName} has been improved in eight releases, from 22 September to 30
         October 2026. Its answers are now more precise, more complete and plainer about what they could and could not
         check.
       </p>
@@ -113,6 +118,11 @@ function LegislationNotes({ botName, scottishJudgments }) {
           {botName} does not say a general rule applies, such as an interpretation Act or a doctrine, unless it found
           the provision that applies it.
         </Item>
+        <Item title="The research now sees every note it is given.">
+          With the AI model in use, the notes {botName} adds to a search result (what the search could not show, which
+          instrument made a change, text read from legislation.gov.uk) were silently dropped before the model read
+          them. They now reach it.
+        </Item>
         <Item title={'No more "You are absolutely right" before anything is checked.'} />
       </Section>
 
@@ -135,8 +145,9 @@ function LegislationNotes({ botName, scottishJudgments }) {
         </Item>
         <Item title="Commencement dates.">
           Where legislation.gov.uk records the date a provision was brought into force, {botName} gives it, with any
-          qualification such as "for specified purposes". A commencement date is never presented as proof that a
-          provision is in force today.
+          qualification such as "for specified purposes". A date that has not yet arrived is given as the date the
+          provision is due to come into force. A commencement date is never presented as proof that a provision is in
+          force today.
         </Item>
         <Item title="In-force status is stated only from the record.">
           {botName} no longer reads in-force status from the version of the text it holds. It says a provision is "not
@@ -145,6 +156,10 @@ function LegislationNotes({ botName, scottishJudgments }) {
         <Item title="Removals are read by kind.">
           A provision repealed is told apart from words removed from a provision that stays, and from a repeal that is
           prospective, temporary or partial.
+        </Item>
+        <Item title="Legislation made before 1963.">
+          The record of changes holds nothing for legislation this old, so {botName} now says that whether it has been
+          amended or repealed is not known from its research, rather than implying it never was.
         </Item>
         <Item title="What an instrument was made under">
           is stated only where {botName} has read the instrument's own words saying so.
@@ -180,6 +195,10 @@ function LegislationNotes({ botName, scottishJudgments }) {
           {botName} never treats the absence of a recorded revocation as confirmation that an instrument still has
           effect.
         </Item>
+        <Item title="Questions about the whole list.">
+          If you ask which of the listed instruments contain or do something, the answer says how many it actually
+          checked and that the rest were not, rather than presenting a few examples as the whole list.
+        </Item>
         <Item title="Long lists.">
           Where more than 40 instruments are found, the list shown leads with those not revoked in whole.
         </Item>
@@ -205,7 +224,11 @@ function LegislationNotes({ botName, scottishJudgments }) {
         </Item>
         <Item title="A named case that was not found.">
           If you name a case and the search does not return it, {botName}'s research is now told it was not found, so
-          that it does not describe what the case decided as though it had read the judgment.
+          that it does not describe what the case decided as though it had read the judgment. The answer says the case
+          was not among the judgments returned, not that the database lacks it: a search can miss a judgment.
+        </Item>
+        <Item title="Judgments read in full.">
+          A judgment of up to about 60,000 characters is now read whole rather than summarised first.
         </Item>
         {scottishJudgments ? (
           <Item title="Scottish judgments.">
@@ -239,6 +262,9 @@ function LegislationNotes({ botName, scottishJudgments }) {
         <Item title="No blank or lost replies.">
           If the AI service fails part-way, {botName} recovers sooner and tells you what happened, rather than leaving
           an empty answer.
+        </Item>
+        <Item title="A Deep Research plan that cannot be drafted says why.">
+          If the AI service refuses the request, you are told whether to try again later or to tell your administrator.
         </Item>
         <Item title="Deep Research steps build on each other.">
           Each step is handed what the earlier steps found, instead of searching for it again.
