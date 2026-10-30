@@ -359,6 +359,11 @@ def get_tool_result_threshold(tool_name: str) -> int:
     threshold = get_summarise_threshold()
     if tool_name in WHOLE_TEXT_TOOLS:
         return max(threshold, CASE_LAW_WHOLE_CHARS)
+    # P3.34: a definitions list is never summarised and is sized under this
+    # bound by construction, so the last-resort cap must not cut it either.
+    from ..utils.definitions import DEFINITIONS_TOOL, DEFINITIONS_WHOLE_CHARS
+    if tool_name == DEFINITIONS_TOOL:
+        return max(threshold, DEFINITIONS_WHOLE_CHARS)
     return threshold
 
 
