@@ -195,9 +195,30 @@ def test_the_restore_is_idempotent_and_a_note_is_not_a_naming():
     assert cl.restore_court_limits(only_note, LIMS) == (only_note, 0)
 
 
-def test_a_question_left_undecided_is_never_restored_and_at_most_two_are():
-    open_q = [{**LIMS[0], "kind": 2}]
-    assert cl.restore_court_limits(ANSWER, open_q) == (ANSWER, 0)
+@pytest.mark.parametrize("kind", [1, 2])
+def test_only_a_confinement_is_restored(kind):
+    other = [{**LIMS[0], "kind": kind}]
+    assert cl.restore_court_limits(ANSWER, other) == (ANSWER, 0)
+
+
+def test_the_note_quotes_the_matched_sentence_and_the_next_within_450():
+    long_tail = " ".join(["The tribunal heard further evidence on the point."] * 12)
+    passage = ("Nothing in this judgment is intended to fetter the tribunal's discretion. "
+               "The weight is for the tribunal. " + long_tail)
+    assert cl.restore_excerpt(passage) == (
+        "Nothing in this judgment is intended to fetter the tribunal's discretion. "
+        "The weight is for the tribunal.")
+    lead = "The background is long. " * 10
+    got = cl.restore_excerpt(lead + "Our decision is confined to the facts of this case. "
+                             + "Then " + "x" * 460 + ".")
+    assert got == "Our decision is confined to the facts of this case."
+    huge = "Our decision is confined to the facts of this case, " + "and so on " * 60 + "."
+    cut = cl.restore_excerpt(huge)
+    assert cut.endswith(" ...") and len(cut) <= cl.MAX_RESTORE_CHARS + 4
+    assert cl.restore_excerpt(P43_NORM) == P43_NORM          # Evans: both sentences, 402 chars
+
+
+def test_at_most_two_notes():
     many = [{**LIMS[0], "url": f"{URL}{i}", "ncn": f"[2025] EWCA Crim 115{i}", "title": "X v R"}
             for i in range(4)]
     answer = " ".join(f"[2025] EWCA Crim 115{i} held Y." for i in range(4))
@@ -320,3 +341,14 @@ def test_run_worker_agent_reads_the_limits_back_from_its_tool_results(monkeypatc
     result = asyncio.run(agent_core.run_worker_agent(loop, chunk, "brief", "m", None, 0))
     assert result["court_limits"] == LIMS
     set_request_provider_config({})
+
+
+def test_the_answer_note_quotes_the_excerpt_not_the_whole_passage():
+    tail = " ".join(["The tribunal heard further evidence on the point."] * 12)
+    lim = {**LIMS[0], "passage": "Our decision is confined to the facts of this case. "
+                                 "Nothing else follows. " + tail}
+    out, n = cl.restore_court_limits(ANSWER, [lim])
+    assert n == 1
+    assert out.count('decision: "Our decision is confined to the facts of this case. '
+                     'Nothing else follows."') == 1
+    assert "further evidence" not in out

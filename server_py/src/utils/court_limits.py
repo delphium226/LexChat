@@ -22,7 +22,9 @@ outlets, one detector (`find_limits`):
 3. `restore_court_limits`: at the answer seam, where an answer names the
    judgment and does not carry the limit, "Also in <case>, at [N], the court
    limited its own decision: "..."" goes after the paragraph that first names
-   it (P3.13's and P3.12's pattern; at most `MAX_RESTORES`).
+   it (P3.13's and P3.12's pattern; at most `MAX_RESTORES`): a confinement
+   (kind 0) only, quoting the matched sentence and, where it fits, the next
+   (`restore_excerpt`, at most `MAX_RESTORE_CHARS`).
 
 **Precision over recall.** A passage counts only when the court speaks of its
 own decision in the first person or as "this judgment" ("our focus was
@@ -43,7 +45,7 @@ logger = logging.getLogger("agent")
 
 __all__ = [
     "find_limits", "court_limits_from_result", "court_limit_note", "limits_in_text",
-    "court_limits_block", "restore_court_limits", "COURT_LIMIT_HEAD", "MAX_RESTORES",
+    "court_limits_block", "restore_court_limits", "restore_excerpt", "COURT_LIMIT_HEAD", "MAX_RESTORES",
 ]
 
 CASE_LAW_TEXT_TOOL = "get_case_law_text"
@@ -52,10 +54,15 @@ MAX_PASSAGES = 2          # per judgment
 MAX_PASSAGE_CHARS = 700   # a passage over this is cut at a sentence end
 MAX_RESTORES = 2          # per answer
 MAX_BLOCK_JUDGMENTS = 6   # per synthesis block
-# Only a confinement (0) or a "not to be taken as deciding" (1) goes back into
-# an answer; a question left undecided (2) is the Worker's and the synthesis's
-# to weigh, and out of context it reads as a limit on the holding.
-RESTORED_KINDS = (0, 1)
+# Only a confinement (0) goes back into an answer (user decision, Session 52):
+# "not to be taken as deciding" (1) and a question left undecided (2) are the
+# Worker's and the synthesis's to weigh, and out of context they read as a
+# limit on the holding they are not.
+RESTORED_KINDS = (0,)
+# The answer note quotes the matched sentence, and the next one where it fits,
+# within this (P3.12's excerpt bound); the Worker's and the synthesis's blocks
+# keep the whole passage, up to MAX_PASSAGE_CHARS.
+MAX_RESTORE_CHARS = 450
 
 _WS = re.compile(r"\s+")
 
@@ -441,6 +448,35 @@ def court_limits_block(limits: Iterable[dict], texts: Iterable[str]) -> str:
 # the answer seam
 # ---------------------------------------------------------------------------
 
+def restore_excerpt(passage: str, limit: int = MAX_RESTORE_CHARS) -> str:
+    """What the answer note quotes of a passage: the sentence the limit is in,
+    and the sentence after it where both fit within `limit` (Evans [43]'s
+    second sentence, "would yield a different result", is what completes the
+    limit); a matched sentence over `limit` is cut at a word with " ...".
+    Verbatim apart from whitespace. Never raises."""
+    try:
+        text = _norm(passage)
+        rel = 0
+        for _rank, rx in sorted(_LIMIT_PATTERNS, key=lambda p: p[0]):
+            m = rx.search(text)
+            if m:
+                rel = m.start()
+                break
+        sents = _sentences(text)
+        idx = next((i for i, (a, b) in enumerate(sents) if a <= rel < b), 0)
+        a, b = sents[idx] if sents else (0, len(text))
+        out = text[a:b].strip()
+        if idx + 1 < len(sents):
+            two = text[a:sents[idx + 1][1]].strip()
+            if len(two) <= limit:
+                out = two
+        if len(out) > limit:
+            out = out[:limit].rsplit(" ", 1)[0].rstrip(",;:") + " ..."
+        return out
+    except Exception:
+        return _norm(passage)[:limit]
+
+
 def restore_court_limits(answer: str, limits: Iterable[dict],
                          max_notes: int = MAX_RESTORES) -> tuple:
     """(answer, notes added). For each judgment the answer names whose limit
@@ -473,7 +509,7 @@ def restore_court_limits(answer: str, limits: Iterable[dict],
             name = " ".join(p for p in (lim.get("title"), lim.get("ncn")) if p) or "this judgment"
             at_para = f", at [{lim['para']}]" if lim.get("para") else ""
             inserts.append((pos, f"\n\nAlso in {name}{at_para}, the court limited its own "
-                                 f"decision: \"{_norm(lim['passage'])}\""))
+                                 f"decision: \"{restore_excerpt(lim['passage'])}\""))
         if not inserts:
             return answer, 0
         for pos, text in sorted(inserts, key=lambda x: x[0], reverse=True):
