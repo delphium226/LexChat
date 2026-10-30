@@ -391,6 +391,9 @@ async def run_worker_agent(
             # retried (it falls into the lost-report label below). The Manager,
             # planner, synthesis and the A4 reformat do not pass it.
             worker_call=True,
+            # P1.8: every result comes from `run_worker_tool`, which bounds
+            # the tool's own output; the loop's cap would cut code text.
+            results_bounded=True,
         )
     except BaseException as e:
         # Close the audit delegation on the failure path too — a trace that

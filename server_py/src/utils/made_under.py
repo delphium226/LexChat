@@ -372,6 +372,12 @@ def _clean_title(t: str) -> str:
 
 MADE_UNDER_TOOL = "find_instruments_made_under"
 MAX_LISTED = 40
+# P1.8: the result's size bound, and the threshold `get_tool_result_threshold`
+# gives this tool (P3.34's pattern for `find_definitions`). The list is never
+# summarised; 40 rows with titles cut at 110 characters measured at most 11,612
+# characters over every stored call (the longest row 337), under the 12,000
+# the fallback threshold allowed, which a list of longer rows would cross.
+MADE_UNDER_WHOLE_CHARS = 30_000
 
 _ID = re.compile(r"^[a-z]{2,6}/(?:[A-Za-z0-9]+/)?[0-9\-]+/\d+$")
 
