@@ -34,9 +34,9 @@ from src.utils.search_scope import (  # noqa: E402
 )
 
 ID = re.compile(r"\b[a-z]{2,6}/[A-Za-z0-9-]+(?:/[A-Za-z0-9-]+)+")
-SOURCED = "(lists a commencement or repeal)"
+SOURCED = "(lists a commencement or removal)"
 DATED = "(dates added for commencements)"
-BOTH = "(lists a commencement or repeal; dates added for commencements)"
+BOTH = "(lists a commencement or removal; dates added for commencements)"
 OLD = "(made before 1963)"
 
 
@@ -124,7 +124,7 @@ def test_the_footer_names_one_list_where_it_named_two():
             f"{SOURCED}, which this research consulted directly") in clauses
     cur = _currency_footer_clause(log)
     assert ("what was checked is the recorded changes marked above as listing a "
-            "commencement or repeal, which name the instruments involved provision "
+            "commencement or removal, which name the instruments involved provision "
             "by provision but carry no dates.") in cur
     assert not ID.search(cur)
 
@@ -178,7 +178,7 @@ def test_past_eight_the_rest_are_counted_with_their_marks():
         else:
             _empty(log, f"ssi/2020/{i}")
     rel = _relations_footer_clause(log)
-    assert ("ssi/2020/8 and 3 more (2 of them listing a commencement or repeal), "
+    assert ("ssi/2020/8 and 3 more (2 of them listing a commencement or removal), "
             "which this research consulted directly") in rel
     assert "ssi/2020/9" not in rel
     assert f"ssi/2020/2 {SOURCED}" in rel
@@ -213,7 +213,7 @@ def test_some_dated_records_are_marked_and_pointed_at():
     rel, cur = _relations_footer_clause(log), _currency_footer_clause(log)
     assert f"for asp/2025/2 {BOTH}, asp/2018/9 {SOURCED}, ssi/2019/4, which" in rel
     assert ("what was checked is the recorded changes marked above as listing a "
-            "commencement or repeal, which name the instruments involved provision by "
+            "commencement or removal, which name the instruments involved provision by "
             "provision, and, for the commencements made by another instrument in those "
             "marked above as having dates added for commencements, the date") in cur
     assert _lists(rel + cur) == [("asp/2025/2", "asp/2018/9", "ssi/2019/4")]

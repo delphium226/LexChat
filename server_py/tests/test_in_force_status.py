@@ -527,9 +527,9 @@ def test_a_sourced_record_keeps_its_wording_beside_an_empty_one():
     clause = _currency_footer_clause(log)
     # P4.20: it points at the record marked in P3.5's list, not a second list.
     assert ("what was checked is the recorded changes marked above as listing a "
-            "commencement or repeal") in clause
+            "commencement or removal") in clause
     assert "ssi/2001/1" not in clause
-    assert ("recorded changes for ssi/2001/1 (lists a commencement or repeal), "
+    assert ("recorded changes for ssi/2001/1 (lists a commencement or removal), "
             "ssi/2001/2, which this research consulted directly") in _relations_footer_clause(log)
     assert "no change record was consulted" not in clause
     assert "neither a commencement nor a repeal" not in clause

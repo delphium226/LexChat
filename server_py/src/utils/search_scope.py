@@ -1624,13 +1624,13 @@ def _relations_limb(log: Optional[list]) -> str:
 # that holds it; one all of them hold is said of "those recorded changes", so
 # the common one-record footer carries no mark.
 _MAX_RECORDS_NAMED = 8
-_MARK_SOURCED = "lists a commencement or repeal"
+_MARK_SOURCED = "lists a commencement or removal"
 _MARK_DATED = "dates added for commencements"
 _MARK_OLD = f"made before {CHANGE_RECORD_FIRST_YEAR}"
 # How a clause pointing into the list, and a remainder past the cap, say each
 # mark ("those marked above as ...", "2 of them ...").
 _MARK_AS = {
-    _MARK_SOURCED: "listing a commencement or repeal",
+    _MARK_SOURCED: "listing a commencement or removal",
     _MARK_DATED: "having dates added for commencements",
     _MARK_OLD: f"made before {CHANGE_RECORD_FIRST_YEAR}",
 }
