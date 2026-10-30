@@ -459,7 +459,7 @@ async def _turn(monkeypatch, research_mode, worker_calls, manager_text,
         "model": "test-model", "_tool_memo_enabled": False,
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False, results_bounded=False):
         if name == "search_case_law":
             return json.dumps(_caselaw_result(n=5))
         return json.dumps({"results": [
@@ -470,7 +470,7 @@ async def _turn(monkeypatch, research_mode, worker_calls, manager_text,
 
     async def worker_chat_loop(messages, model, cancel_event, num_ctx, tools,
                                executor, on_chunk=None, emit_tool_details=False,
-                               timing_collector=None, worker_call=False):
+                               timing_collector=None, worker_call=False, results_bounded=False):
         for name, args in worker_calls:
             await executor(name, args)
         return {"role": "assistant", "content": (
@@ -605,7 +605,7 @@ def _dr_worker(results):
 
 
 async def _synthesis(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                     on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
+                     on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False, results_bounded=False):
     return {"role": "assistant", "content": "Integrated report."}
 
 

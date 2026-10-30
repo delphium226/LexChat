@@ -1939,6 +1939,18 @@ async def run_worker_tool(
                 "result": result,
             })
 
+    # P1.8: the bound on this result, on the tool's OWN output and nothing
+    # else, here where that output ends and before any code-written text is
+    # appended to it. The Worker's chat loop no longer cuts what this returns
+    # (`results_bounded`): there the cut fell on the blocks below, not on the
+    # output (310 stored results, every cut in code text). A body within the
+    # limit, which a summarised one always is, is returned unchanged.
+    from .provider_factory import cap_tool_body
+    _bounded = cap_tool_body(name, result, timing_collector)
+    if _bounded is not result:
+        _audit_truncated = True
+        result = _bounded
+
     # P1.6 (B14): hand the provision URLs back after summarisation. A 32K
     # section retrieval summarises to ~3.5K of prose that names the sections and
     # carries no URLs at all, so the model — forbidden from inventing one and

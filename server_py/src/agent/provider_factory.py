@@ -364,19 +364,72 @@ def get_tool_result_threshold(tool_name: str) -> int:
     from ..utils.definitions import DEFINITIONS_TOOL, DEFINITIONS_WHOLE_CHARS
     if tool_name == DEFINITIONS_TOOL:
         return max(threshold, DEFINITIONS_WHOLE_CHARS)
+    # P1.8: nor is the made-under list (P3.31: never summarised, at most
+    # `MAX_LISTED` rows); at the fallback threshold its 40-row JSON came within
+    # 400 characters of the old cut, and a longer-titled list would cross it.
+    from ..utils.made_under import MADE_UNDER_TOOL, MADE_UNDER_WHOLE_CHARS
+    if tool_name == MADE_UNDER_TOOL:
+        return max(threshold, MADE_UNDER_WHOLE_CHARS)
     return threshold
+
+
+# P1.8: the headroom over the per-tool threshold before a result is cut.
+TOOL_RESULT_HEADROOM = 4_000
+
+# P1.8: the marker on a tool's own output cut by `cap_tool_body`. It says the
+# cut is in the tool's output and that what follows is whole, so the model
+# never reads a code-written block's absence as the tool's.
+BODY_CUT_MARKER = (
+    "\n\n[Content truncated — this tool's own result exceeded the context limit "
+    "and was cut here; any notes after this line are complete]"
+)
+
+
+def cap_tool_body(tool_name: str, body: str, timing_collector=None,
+                  label: str = "[Worker]") -> str:
+    """The bound on a Worker tool's OWN output, applied by `run_worker_tool`
+    before any code-written text (scope blocks, nudges, ENABLING POWER,
+    CURRENCY, PROVISION FETCHED BY CODE ...) is appended to it (P1.8).
+
+    Same limit the chat loops' cap applied to the whole result
+    (`get_tool_result_threshold` + `TOOL_RESULT_HEADROOM`), so a body under it
+    is returned unchanged. That cap cut the code text instead: over every
+    stored replay it cut 310 Worker results and every cut fell in code text,
+    none in the tool's output (`evidence/seam/s52/p18/`). A summarised body is
+    already within the threshold, so this bites only on output that is never
+    summarised and outgrows its own bound.
+    """
+    limit = get_tool_result_threshold(tool_name) + TOOL_RESULT_HEADROOM
+    if len(body) <= limit:
+        return body
+    logger.warning(f"{label} Result body from '{tool_name}' truncated ({len(body)} -> {limit} chars)")
+    if timing_collector:
+        timing_collector.record_truncation()
+    return body[:limit] + BODY_CUT_MARKER
+
+
+# P1.8: Manager tools whose result is a model-written report, bounded by the
+# Worker's own output cap, with a code-written scope block at its end. The
+# last-resort cap cut the report's findings and its scope block (6 stored
+# delegations at the fallback threshold) and bounded nothing that needed it.
+UNCAPPED_MANAGER_TOOLS = frozenset({"delegate_research"})
 
 
 def cap_tool_result(tool_name: str, result: str, timing_collector=None,
                     label: str = "[ChatLoop]") -> str:
     """The chat loops' last-resort safety net on one tool result.
 
-    Results above the threshold are summarised (and capped) by
-    `run_worker_tool` before reaching here. The +4K headroom leaves room for
-    the phase nudges appended after summarisation so they are never truncated
-    off the tail. Per tool since P3.50 (`get_tool_result_threshold`).
+    Since P1.8 it is NOT applied to a Worker's results: `run_worker_tool`
+    bounds each one itself (`cap_tool_body`, the tool's own output only) and
+    the Worker's loop passes `results_bounded=True`. Applied here, the cut fell
+    on the code-written blocks appended after summarisation, which the +4K
+    headroom was meant to protect and did not (310 stored cuts, every one in
+    code text). Nor to `UNCAPPED_MANAGER_TOOLS`. What remains capped is any
+    other executor's result. Per tool since P3.50 (`get_tool_result_threshold`).
     """
-    limit = get_tool_result_threshold(tool_name) + 4_000
+    if tool_name in UNCAPPED_MANAGER_TOOLS:
+        return result
+    limit = get_tool_result_threshold(tool_name) + TOOL_RESULT_HEADROOM
     if len(result) <= limit:
         return result
     logger.warning(f"{label} Tool result from '{tool_name}' truncated ({len(result)} -> {limit} chars)")
