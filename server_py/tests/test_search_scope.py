@@ -1261,6 +1261,82 @@ def test_footer_trips_no_detector():
     for after, before in _published_changed_notes():
         assert _trips(after) <= _trips(before), (_trips(after) - _trips(before), after)
 
+    # P4.20: the change-record clauses name one list, marked; every variant of
+    # the marks and of the clauses pointing at them, screened whole. The only
+    # trips allowed in the currency clause are its opening's, which every
+    # branch has carried since P2.5 ("Whether legislation is in force is not
+    # something this index reports"): taken from the no-record branch, which
+    # P4.20 does not touch.
+    opening = _trips(_currency_footer_clause(
+        [{"tool": "currency", "kind": "valid_date", "legislation_id": "ssi/1901/1",
+          "valid_date": "2020-01-01"}]))
+    assert IN_FORCE_CLAIM.pattern[:30] in opening
+    # And in the change-record clause, only the trips of P3.49's sentence
+    # ("holds no record of changes"), which P4.20 leaves standing, and only
+    # where an instrument made before 1963 is named.
+    variants = _one_list_variants()
+    pre1963 = _trips(variants["pre-1963 alone"][0])
+    for name, (rel, cur) in variants.items():
+        assert rel or cur, name
+        allowed = pre1963 if "pre-1963" in name else set()
+        assert _trips(rel) <= allowed, (name, _trips(rel) - allowed, rel)
+        assert _trips(cur) <= opening, (name, _trips(cur) - opening, cur)
+        assert len(IN_FORCE_CLAIM.findall(cur)) <= 1, (name, cur)
+        assert not IN_FORCE_CLAIM.search(rel), (name, rel)
+        assert _without_footer("Answer." + "\n\n*Search scope: x." + rel + cur + "*") \
+            == "Answer.", name
+
+
+def _one_list_variants() -> dict:
+    """Every shape of P4.20's one list (`search_scope._record_list`): one
+    record, several with and without a commencement or repeal, past the cap,
+    dated in part and in whole, still to come, made before 1963 alone and
+    mixed, each removal class, and the currency clause's own list where no
+    change-record entry was written."""
+    from src.utils.search_scope import _currency_footer_clause, _relations_footer_clause
+
+    def rec(log, lid, *, rel=0, src=False, dated=0, later=0, words=0, qual=0, rep=0):
+        extra = {"later": later} if later else {}
+        log.append({"tool": "change_record", "legislation_id": lid, "relations": rel,
+                    "by_other": rel, "others": [], "complete": True, "dated": dated,
+                    **extra})
+        log.append({"tool": "currency", "kind": "relations", "legislation_id": lid,
+                    "relations": rel, "commenced": 3 if src else 0, "repeals": rep,
+                    "words_only_removals": words, "qualified_removals": qual,
+                    "dated": dated, **extra})
+        return log
+
+    v = {}
+    v["one, sourced"] = rec([], "asp/2001/1", rel=3, src=True)
+    v["one, empty"] = rec([], "asp/2001/1")
+    v["several, all sourced"] = rec(rec([], "asp/2001/1", rel=3, src=True),
+                                    "asp/2001/2", rel=1, rep=1)
+    v["several, some sourced"] = rec(rec(rec([], "asp/2001/1", rel=3, src=True),
+                                         "ssi/2001/2"), "asp/2001/3", rel=1, rep=1)
+    v["several, none sourced"] = rec(rec([], "ssi/2001/1"), "ssi/2001/2")
+    cap = []
+    for i in range(11):
+        rec(cap, f"ssi/2001/{i + 1}", rel=2 if i in (1, 9) else 0, src=i in (1, 9))
+    v["past the cap"] = cap
+    v["dated, one"] = rec([], "asp/2001/1", rel=3, src=True, dated=2)
+    v["dated, some"] = rec(rec(rec([], "asp/2001/1", rel=3, src=True, dated=2),
+                               "asp/2001/2", rel=3, src=True), "ssi/2001/3")
+    v["dated, still to come"] = rec([], "asp/2001/1", rel=3, src=True, dated=1, later=1)
+    v["pre-1963 alone"] = rec(rec([], "ukpga/1950/28"), "ukpga/Geo6/14/28")
+    v["pre-1963 mixed, one"] = rec(rec([], "asp/2001/1", rel=3, src=True), "ukpga/1950/28")
+    v["pre-1963 mixed, several"] = rec(rec(rec([], "asp/1999/1", rel=3, src=True),
+                                           "ukpga/1950/28"), "ukpga/Geo6/14/28")
+    v["words only"] = rec(rec([], "asp/2001/1", rel=2, words=2), "ssi/2001/2")
+    v["qualified"] = rec(rec([], "ssi/2001/5"), "asp/2001/6", rel=2, qual=2)
+    v["currency only"] = [
+        {"tool": "currency", "kind": "relations", "legislation_id": lid,
+         "commenced": 1, "repeals": 0, "dated": d}
+        for lid, d in (("ssi/2001/3", 1), ("ssi/2001/4", 0))]
+    out = {k: (_relations_footer_clause(log), _currency_footer_clause(log))
+           for k, log in v.items()}
+    assert len({r + c for r, c in out.values()}) == len(out), "variants not distinct"
+    return out
+
 
 def _schedule_line_variants() -> list:
     """Every wording `schedule_units.schedules_note` can produce, on synthetic

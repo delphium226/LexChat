@@ -1608,6 +1608,125 @@ def _relations_limb(log: Optional[list]) -> str:
     return "".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# P4.20: one list of change records on the lawyer's footer
+# ---------------------------------------------------------------------------
+#
+# P3.5's clause named the first three change records consulted, in the order
+# consulted; P2.5's named, sorted, the first three that hold a commencement or
+# repeal; P2.5's dated branch named a third list and P3.49's a fourth (those
+# made before 1963). On one line they could name different instruments, and the
+# lawyer could not tell which was checked: 109 of 423 stored footers carrying
+# both named different instruments, 36 more differed only in order (Thomas, 23
+# and 30 September). The footer now names ONE list, in the order consulted, up
+# to `_MAX_RECORDS_NAMED` then a count, and every other clause points into it.
+# A property some but not all of the records hold is marked against each one
+# that holds it; one all of them hold is said of "those recorded changes", so
+# the common one-record footer carries no mark.
+_MAX_RECORDS_NAMED = 8
+_MARK_SOURCED = "lists a commencement or repeal"
+_MARK_DATED = "dates added for commencements"
+_MARK_OLD = f"made before {CHANGE_RECORD_FIRST_YEAR}"
+# How a clause pointing into the list, and a remainder past the cap, say each
+# mark ("those marked above as ...", "2 of them ...").
+_MARK_AS = {
+    _MARK_SOURCED: "listing a commencement or repeal",
+    _MARK_DATED: "having dates added for commencements",
+    _MARK_OLD: f"made before {CHANGE_RECORD_FIRST_YEAR}",
+}
+
+
+def _sourced(e: dict) -> bool:
+    """A currency `relations` entry whose record lists a commencement or a
+    removal (P2.5; P3.28 counts a words-only or a qualified removal too)."""
+    return bool(e.get("commenced") or e.get("repeals")
+                or e.get("words_only_removals") or e.get("qualified_removals"))
+
+
+def _record_list(entries: Optional[list]) -> dict:
+    """The change records this turn consulted, as the footer names them.
+
+    `order` is P3.5's: every `change_record` entry's id in the order consulted,
+    then any id only a currency `relations` entry carries (none in the stored
+    record; kept so that no id the currency clause speaks of falls outside the
+    list). `named` is True where `_relations_footer_clause` names the list, so
+    that `_currency_footer_clause` points into it rather than naming its own.
+    """
+    rows = [e for e in (entries or []) if e.get("tool") == "change_record"]
+    cur = [e for e in (entries or [])
+           if e.get("tool") == "currency" and e.get("kind") == "relations"]
+    order, old = [], []
+    for e in rows:
+        lid = e.get("legislation_id") or ""
+        if lid and lid not in order:
+            order.append(lid)
+        if (lid and not e.get("relations") and before_change_record(lid)
+                and lid not in old):
+            old.append(lid)
+    if rows:
+        for e in cur:
+            lid = e.get("legislation_id") or ""
+            if lid and lid not in order:
+                order.append(lid)
+    sourced, dated = [], []
+    for e in cur:
+        lid = e.get("legislation_id") or ""
+        if lid and _sourced(e) and lid not in sourced:
+            sourced.append(lid)
+        if lid and e.get("dated") and lid not in dated:
+            dated.append(lid)
+    # P3.49: a list of pre-1963 records alone is said by the pre-1963 clause,
+    # which then stands without the lead (and so without the list).
+    named = bool(order) and not all(lid in old for lid in order)
+    return {"order": order, "old": old, "sourced": sourced, "dated": dated,
+            "named": named}
+
+
+def _some_not_all(ids: list, order: list) -> bool:
+    held = [lid for lid in order if lid in ids]
+    return bool(held) and len(held) < len(order)
+
+
+def _named_records(order: list, marks: dict) -> str:
+    """`order` up to the cap, each id followed by its marks, then a count.
+
+    `marks` maps a mark to the ids it is set on. A remainder past the cap says
+    how many of it carry each mark, so a clause pointing at a mark stays true
+    of the records left unnamed.
+    """
+    shown = []
+    for lid in order[:_MAX_RECORDS_NAMED]:
+        got = [m for m, ids in marks.items() if lid in ids]
+        shown.append(lid + (f" ({'; '.join(got)})" if got else ""))
+    text = ", ".join(shown)
+    rest = order[_MAX_RECORDS_NAMED:]
+    if rest:
+        text += f" and {len(rest)} more"
+        counts = []
+        for m, ids in marks.items():
+            n = sum(1 for lid in rest if lid in ids)
+            if n:
+                counts.append(f"{n} of them {_MARK_AS[m]}")
+        if counts:
+            text += f" ({'; '.join(counts)})"
+    return text
+
+
+def _list_marks(info: dict) -> dict:
+    """The marks the one list carries: a property some but not all of its
+    records hold. The pre-1963 mark only where the list is named beside the
+    pre-1963 clause (the mixed case)."""
+    order = info["order"]
+    marks = {}
+    if _some_not_all(info["sourced"], order):
+        marks[_MARK_SOURCED] = set(info["sourced"])
+    if info["sourced"] and _some_not_all(info["dated"], order):
+        marks[_MARK_DATED] = set(info["dated"])
+    if info["named"] and info["old"]:
+        marks[_MARK_OLD] = set(info["old"])
+    return marks
+
+
 def _relations_footer_clause(entries: Optional[list]) -> str:
     """The lawyer-facing half of P3.5, as one clause on the existing footer.
 
@@ -1629,36 +1748,44 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "change_record"]
     if not rows:
         return ""
-    consulted, old = [], []
-    for e in rows:
-        lid = e.get("legislation_id") or ""
-        if lid and lid not in consulted:
-            consulted.append(lid)
-        # P3.49: written by code, so the lawyer is told whatever the answer says.
-        if (lid and not e.get("relations") and before_change_record(lid)
-                and lid not in old):
-            old.append(lid)
+    info = _record_list(entries)
+    old = info["old"]
     old_clause = ""
     if old:
         one = len(old) == 1
-        # Every one up to the limb's 8, then a count: at 3, the acceptance's
-        # rep 2 named three of six and left out the Shops Act 1950 itself.
-        named = ", ".join(old[:8]) + (f" and {len(old) - 8} more" if len(old) > 8 else "")
+        if not info["named"]:
+            # P3.49: written by code, so the lawyer is told whatever the answer
+            # says. Every one up to the limb's 8, then a count: at 3, the
+            # acceptance's rep 2 named three of six and left out the Shops Act
+            # 1950 itself. Here this is the footer's one list (P4.20).
+            named = ", ".join(old[:8]) + (
+                f" and {len(old) - 8} more" if len(old) > 8 else "")
+            return (
+                " The index used holds no record of changes to legislation made "
+                f"before {CHANGE_RECORD_FIRST_YEAR} ({named}), so whether "
+                f"{'it has' if one else 'they have'} been amended or repealed since "
+                "is not known from this research; check the revised text on "
+                f"legislation.gov.uk before relying on {'it' if one else 'them'}."
+            )
+        # P4.20: beside the consulted list, the pre-1963 records are marked
+        # within it, not named again in a second list.
         old_clause = (
             " The index used holds no record of changes to legislation made before "
-            f"{CHANGE_RECORD_FIRST_YEAR} ({named}), so whether "
-            f"{'it has' if one else 'they have'} been amended or repealed since is "
-            "not known from this research; check the revised text on "
-            f"legislation.gov.uk before relying on {'it' if one else 'them'}."
+            f"{CHANGE_RECORD_FIRST_YEAR}, so whether "
+            + (f"the one marked above as {_MARK_AS[_MARK_OLD]} has" if one
+               else f"those marked above as {_MARK_AS[_MARK_OLD]} have")
+            + " been amended or repealed since is not known from this research; "
+            "check the revised text on legislation.gov.uk before relying on "
+            f"{'it' if one else 'them'}."
         )
-        if all(lid in old for lid in consulted):
-            return old_clause
     any_found = any(e.get("by_other") for e in rows)
     truncated = any(not e.get("complete") for e in rows)
+    # P4.20: the footer's one list of change records (`_record_list`), up to
+    # 8 then a count (P3.5 named the first 3 and said nothing of the rest).
     lead = (
         " Commencement and amendment relations above come from legislation.gov.uk's "
-        f"recorded changes for {', '.join(consulted[:3])}, which this research "
-        "consulted directly"
+        f"recorded changes for {_named_records(info['order'], _list_marks(info))}, "
+        "which this research consulted directly"
     )
     if any_found and any(e.get("dated") for e in rows):
         # P3.21: a date the hop retrieved is not "read from the instrument
@@ -2495,21 +2622,30 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "currency"]
     if not rows:
         return ""
-    sourced, consulted, dated = [], False, []
-    for e in rows:
-        if e.get("kind") == "relations":
-            consulted = True
-            lid = e.get("legislation_id") or ""
-            # P3.28: a record whose only removals are words-only or qualified
-            # ones still lists a removal, so P4.18's "list neither a
-            # commencement nor a repeal" would be false of it: it is sourced.
-            # One whose only "repeal" was a power conferred no longer is.
-            if lid and (e.get("commenced") or e.get("repeals")
-                        or e.get("words_only_removals")
-                        or e.get("qualified_removals")) and lid not in sourced:
-                sourced.append(lid)
-            if lid and e.get("dated") and lid not in dated:
-                dated.append(lid)
+    consulted = any(e.get("kind") == "relations" for e in rows)
+    # P3.28: a record whose only removals are words-only or qualified ones
+    # still lists a removal, so P4.18's "list neither a commencement nor a
+    # repeal" would be false of it: it is sourced (`_sourced`). One whose only
+    # "repeal" was a power conferred no longer is.
+    info = _record_list(entries)
+    sourced, dated = info["sourced"], info["dated"]
+    # P4.20: where P3.5's clause names the footer's list, this clause points
+    # into it ("those recorded changes", or the ones marked there) and names
+    # no second list. Where it names none (no change-record entry, which no
+    # stored turn has), this clause names its own, marked the same way.
+    if info["named"]:
+        base, where = info["order"], "marked above"
+        checked = ("those recorded changes" if not _some_not_all(sourced, base)
+                   else "the recorded changes marked above as "
+                        f"{_MARK_AS[_MARK_SOURCED]}")
+    else:
+        base, where = sourced, "marked"
+        checked = "the recorded changes for " + _named_records(
+            sourced, {_MARK_DATED: set(dated)} if _some_not_all(dated, sourced) else {})
+    dated_ref = ("their commencements made by another instrument"
+                 if not _some_not_all(dated, base)
+                 else "the commencements made by another instrument in those "
+                      f"{where} as {_MARK_AS[_MARK_DATED]}")
     if sourced and dated:
         # P3.21: code retrieved commencement dates, so "nothing above has been
         # checked against a commencement date" is false here. Says what the date
@@ -2517,10 +2653,9 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
         # one "is in force" (an indirect question) and its disclaimer literal.
         return (
             " Whether legislation is in force is not something this index reports; "
-            f"what was checked is the recorded changes for {', '.join(sorted(sourced)[:3])}, "
+            f"what was checked is {checked}, "
             "which name the instruments involved provision by provision, and, for "
-            f"the commencements of {', '.join(sorted(dated)[:3])} made by another "
-            f"instrument, the date {_DATE_RECORD} gives for each. Neither is a check "
+            f"{dated_ref}, the date {_DATE_RECORD} gives for each. Neither is a check "
             "of whether a provision has since been amended or repealed."
         )
     lead = (
@@ -2529,8 +2664,7 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     )
     if sourced:
         lead += (
-            "; what was checked is the recorded changes for "
-            f"{', '.join(sorted(sourced)[:3])}, which name the instruments "
+            f"; what was checked is {checked}, which name the instruments "
             "involved provision by provision but carry no dates."
         )
     elif consulted:

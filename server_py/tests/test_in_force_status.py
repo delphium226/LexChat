@@ -71,6 +71,7 @@ from src.prompts import (
 )
 from src.utils.search_scope import (
     _currency_footer_clause,
+    _relations_footer_clause,
     _currency_limb,
     amendment_search_note,
     answer_scope_footer,
@@ -520,10 +521,16 @@ def test_a_sourced_record_keeps_its_wording_beside_an_empty_one():
     """The sourced branch wins, as before, when one record holds a commencement
     and another holds nothing: it says what was checked, and it never said no
     record was consulted."""
-    clause = _currency_footer_clause(_consulted(
+    log = _consulted(
         ("ssi/2001/1", _amendment_row("coming into force", affecting="ssi/2001/9")),
-        ("ssi/2001/2", [])))
-    assert "what was checked is the recorded changes for ssi/2001/1" in clause
+        ("ssi/2001/2", []))
+    clause = _currency_footer_clause(log)
+    # P4.20: it points at the record marked in P3.5's list, not a second list.
+    assert ("what was checked is the recorded changes marked above as listing a "
+            "commencement or repeal") in clause
+    assert "ssi/2001/1" not in clause
+    assert ("recorded changes for ssi/2001/1 (lists a commencement or repeal), "
+            "ssi/2001/2, which this research consulted directly") in _relations_footer_clause(log)
     assert "no change record was consulted" not in clause
     assert "neither a commencement nor a repeal" not in clause
 
