@@ -36,6 +36,10 @@ from ..utils.instrument_lookup import (
 from ..utils.lawyer_words import with_lawyer_words
 from ..utils.made_under import prune_section_family_entries
 from ..utils.revocation_marks import mark_revoked_instruments
+from ..utils.made_under_answer import list_made_under_for_answer
+from ..utils.court_limits import (
+    CASE_LAW_TEXT_TOOL, court_limits_block, dedupe_limits, limits_in_text, restore_court_limits,
+)
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
 from ..utils.paragraph_restore import (
@@ -286,6 +290,8 @@ async def run_worker_agent(
     # this Worker cut exactly, read back from its own tool results (a memo
     # hit included), so the answer seam can put back one the answer left out.
     handed_paras: list = []
+    # P3.50 (A1): the court's own limits found in the judgments this run read.
+    court_limits: list = []
 
     # P4.24: the exact title each `lookup_legislation` in this run returned,
     # for the Sources rail's bare-id entries. A lookup adds no rail source.
@@ -331,6 +337,11 @@ async def run_worker_agent(
             empty_search_lookup=_empty_search_lookup,
         )
         handed_paras.extend(handed_paragraphs(out))
+        # P3.50 (A1): the court's own limits this Worker was handed, read back
+        # from its tool results (a memo hit included), for the synthesis block
+        # and the answer seam.
+        if name == CASE_LAW_TEXT_TOOL:
+            court_limits.extend(limits_in_text(out))
         return out
 
     # P3.25: the statutory instruments this quick-lookup run has looked up in
@@ -556,6 +567,7 @@ async def run_worker_agent(
     # across them, because the footer describes the whole turn.
     result["searches"] = list(search_log)
     result["handed_paragraphs"] = list(handed_paras)
+    result["court_limits"] = dedupe_limits(court_limits)
 
     if _audit:
         _audit.end_delegation(
@@ -1042,6 +1054,8 @@ async def process_user_request(
     # P3.12 (answer seam): every schedule paragraph code handed any Worker of
     # this turn cut exactly, read once the answer is written.
     handed_paras: list = []
+    # P3.50 (A1): the court's own limits in the judgments any Worker read.
+    court_limits: list = []
 
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
@@ -1114,6 +1128,7 @@ async def process_user_request(
                 if result.get("halted") else "complete")
             all_searches.extend(result.get("searches") or [])
             handed_paras.extend(result.get("handed_paragraphs") or [])
+            court_limits.extend(result.get("court_limits") or [])
             # P4.5: a lost report is a label, not research, so P4.2's fallback
             # must not reproduce it to the lawyer as findings.
             if (result.get("content") or "").strip() and not result.get("lost"):
@@ -1249,6 +1264,23 @@ async def process_user_request(
             clean, _marks = mark_revoked_instruments(clean, all_searches)
             if _marks:
                 logger.info("[Manager] Marked %d recorded revocation(s)", _marks)
+            # P3.50 (A1): a judgment the answer names whose own limit on its
+            # decision (found by code in the text a Worker read) the answer
+            # does not carry gets the court's words back, after the paragraph
+            # that names it. "Also in" notes, so the passes above never read it.
+            clean, _limits = restore_court_limits(clean, court_limits)
+            if _limits:
+                logger.info("[Manager] Restored %d court's own limit(s)", _limits)
+            # P3.51 / P3.52 (A2): the record's instruments made under a
+            # section the answer cites that it does not name, listed at its
+            # end. Legislation research types only; no database until the
+            # record is loaded; byte-identical where nothing is listed.
+            if research_mode in ("legislation_only", "legislation_and_case_law"):
+                clean, _mu_lines = await list_made_under_for_answer(
+                    clean, retrieved_sources, retrieved_titles)
+                if _mu_lines:
+                    logger.info("[Manager] Listed %d made-under line(s) for cited sections",
+                                _mu_lines)
     # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
     # the Manager is instructed to pass it through verbatim and is not compelled
     # to — and in conversational mode it answers in its own words. Idempotent, so
@@ -1463,8 +1495,14 @@ def build_synthesis_messages(
     research_mode: str = "legislation_only",
     lost: Optional[list] = None,
     searches: Optional[list] = None,
+    court_limits: Optional[list] = None,
 ) -> list:
     """The Deep Research synthesis call's messages, from the steps' findings.
+
+    `court_limits` (P3.50, A1): the passages in which a judgment a step read
+    limits its own decision, found by code in its text; handed over for each
+    judgment a step report names, because the synthesis never reads the
+    judgment. None adds nothing.
 
     `searches` (every step's scope record) carries P3.53's list-coverage note:
     one step may list what a later step searches, so the line is computed over
@@ -1498,6 +1536,9 @@ def build_synthesis_messages(
         f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
     )
     synthesis_user += pinpoint_block([f["content"] for f in step_findings])
+    if court_limits:
+        synthesis_user += court_limits_block(court_limits,
+                                             [f["content"] for f in step_findings])
     synthesis_user += incomplete_steps_note(
         halts or [], steps_count if steps_count is not None else len(step_findings),
         lost=lost,
@@ -1570,6 +1611,8 @@ async def run_deep_research(
     # P2.2 (B5): every legislation search the plan ran, across all steps, and
     # (P2.4) every case-law search.
     all_searches: list = []
+    # P3.50 (A1): the court's own limits in every judgment any step read.
+    dr_court_limits: list = []
 
     for i, step in enumerate(steps, 1):
         if cancel_event and cancel_event.is_set():
@@ -1627,6 +1670,7 @@ async def run_deep_research(
         for _lid, _t in (result.get("retrieved_titles") or {}).items():
             retrieved_titles.setdefault(_lid, _t)
         all_searches.extend(result.get("searches") or [])
+        dr_court_limits.extend(result.get("court_limits") or [])
 
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
@@ -1635,7 +1679,7 @@ async def run_deep_research(
     synthesis_messages = build_synthesis_messages(
         user_query, approved_plan, step_findings, halts, len(steps),
         research_mode=_get_cfg().get("_research_mode") or "legislation_only",
-        lost=lost, searches=all_searches,
+        lost=lost, searches=all_searches, court_limits=dr_court_limits,
     )
 
     async def _no_tools_executor(name: str, args: dict) -> str:
@@ -1681,6 +1725,14 @@ async def run_deep_research(
     # before P1.6's link note can be appended after it, which would leave it
     # out of reach of the trailing-only strip before the real footer.
     final["content"] = strip_answer_footer(final["content"])
+    # P3.50 (A1): as on the conversational Manager's path, a judgment the
+    # report names gets the court's own limit back where the report does not
+    # carry it. Not on a fallback built from the step findings.
+    if (not final.get("synthesis_failed")
+            and _get_cfg().get("_research_mode") not in _RAIL_FALLBACK_MODES):
+        final["content"], _limits = restore_court_limits(final["content"], dr_court_limits)
+        if _limits:
+            logger.info("[DeepResearch] Restored %d court's own limit(s)", _limits)
 
     # P1.6 (B14). The synthesis call composes its own prose from the step
     # reports, so a provision link the steps never carried can appear here for

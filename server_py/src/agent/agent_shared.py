@@ -92,6 +92,7 @@ from .tools import (
     _PARLIAMENT_TOOL_NAMES,
 )
 from .tools.caselaw import named_case_note
+from ..utils.court_limits import court_limit_note
 
 logger = logging.getLogger("agent")
 
@@ -979,6 +980,7 @@ async def made_under_sections_note(name: str, raw_result, search_log: Optional[l
     raises."""
     if name != "search_legislation_sections":
         return "", []
+    block, entries = "", []
     try:
         from ..utils.made_under import (
             handed_families, returned_section_families, section_families_block,
@@ -986,15 +988,55 @@ async def made_under_sections_note(name: str, raw_result, search_log: Optional[l
         act, bases = returned_section_families(raw_result)
         done = handed_families(search_log)
         bases = [b for b in bases if (act, b) not in done]
-        if not act or not bases:
-            return "", []
-        from ..services.made_under_store import section_family_rows
-        rows, cov = await section_family_rows(act, bases)
-        if not rows:
-            return "", []
-        return section_families_block(act, bases, rows, cov)
+        if act and bases:
+            from ..services.made_under_store import section_family_rows
+            rows, cov = await section_family_rows(act, bases)
+            if rows:
+                block, entries = section_families_block(act, bases, rows, cov)
     except Exception:
+        block, entries = "", []
+    # P3.51 (A2, Session 52): a returned provision that inserts a section into
+    # another Act (s.8 of asp/2003/10 inserts s.33A into the Housing (Scotland)
+    # Act 1987) is keyed on the amended Act's section too, so the instruments
+    # made under the inserted section are listed. Its own block, after the
+    # returned sections'; "" wherever no returned row inserts a section the
+    # record can place. Fail-soft: a failure here leaves the block above.
+    try:
+        more, more_entries = await _inserted_families_note(raw_result, search_log, entries)
+        return block + more, entries + more_entries
+    except Exception:
+        return block, entries
+
+
+async def _inserted_families_note(raw_result, search_log: Optional[list], earlier: list) -> tuple:
+    """`(block, entries)` for the sections a section search's rows insert into
+    another Act, resolved to that Act through the made-under record
+    (`made_under_store.amended_act_id`); each family once per Worker run."""
+    from ..utils.made_under import handed_families, inserted_sections, section_families_block
+
+    found = inserted_sections(raw_result)
+    if not found:
         return "", []
+    from ..services.made_under_store import amended_act_id, section_family_rows
+
+    done = handed_families(list(search_log or []) + list(earlier or []))
+    by_act: dict = {}
+    for kind, ref, base, sec, by in found:
+        act = await amended_act_id(kind, ref, f"section/{sec}")
+        if not act or (act, base) in done:
+            continue
+        e = by_act.setdefault(act, {"bases": [], "inserted": []})
+        if base not in e["bases"]:
+            e["bases"].append(base)
+        e["inserted"].append((sec, by))
+    block, entries = "", []
+    for act, e in by_act.items():
+        rows, cov = await section_family_rows(act, e["bases"])
+        if rows:
+            b, en = section_families_block(act, e["bases"], rows, cov, inserted=e["inserted"])
+            block += b
+            entries += en
+    return block, entries
 
 
 def _has_scottish_list(result) -> bool:
@@ -1999,6 +2041,11 @@ async def run_worker_tool(
     result += schedules_line
     result += relations_note
     result += fetched_note
+    # P3.50 (A1): a passage in which the court limits its own decision, found
+    # in the RAW judgment text and appended after summarisation, so a summary
+    # cannot drop it. Self-gated on `get_case_law_text`; "" where the text
+    # holds no such passage, so every other result is unchanged.
+    result += court_limit_note(name, raw_result)
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note

@@ -81,6 +81,9 @@ from src.utils.research_halt import (  # noqa: E402
     lost_worker_report,
 )
 from src.utils.search_scope import strip_scope_blocks  # noqa: E402
+from src.utils.court_limits import (  # noqa: E402
+    COURT_LIMIT_HEAD, court_limits_from_result, dedupe_limits, restore_court_limits,
+)
 from src.utils.stopwatch import TimingCollector  # noqa: E402
 from src.utils.suggestions import extract_suggestions  # noqa: E402
 
@@ -190,6 +193,35 @@ def halts_from(turn: dict) -> list:
     return out
 
 
+def court_limits_from(turn: dict) -> list:
+    """P3.50 (A1): the court's own limits in every judgment the turn's
+    delegations read, found by the product's detector in each recorded
+    `get_case_law_text` raw result, as `run_deep_research` collects them from
+    its steps' tool results (the recorded results predate the block, so they
+    are rebuilt from raw, never parsed)."""
+    out = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for t in dg.get("tools") or []:
+            if t.get("name") == "get_case_law_text" and t.get("raw_result"):
+                out.extend(court_limits_from_result(t["raw_result"]))
+    return dedupe_limits(out)
+
+
+def rev_has_court_limits_block(rev: str) -> bool:
+    """Did the synthesis builder at `rev` hand over P3.50's limits block?"""
+    return "court_limits_block(" in _file_at(rev, "server_py/src/agent/agent_core.py")
+
+
+def strip_court_limits_block(body: str) -> str:
+    head = f"\n\n[{COURT_LIMIT_HEAD}S"
+    start = body.find(head)
+    if start < 0:
+        return body
+    close = f"[/{COURT_LIMIT_HEAD}S]"
+    end = body.find(close, start)
+    return body[:start] + (body[end + len(close):] if end >= 0 else "")
+
+
 def _prompt_constant_at(rev: str, name: str) -> str:
     """One string constant out of `src/prompts.py` at a git revision.
 
@@ -291,12 +323,14 @@ def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
     messages = agent_core.build_synthesis_messages(
         turn.get("question") or "", turn.get("plan") or {}, findings,
         halts_from(turn), len(findings), research_mode=research_mode,
-        lost=lost_from(turn, apply_lost),
+        lost=lost_from(turn, apply_lost), court_limits=court_limits_from(turn),
     )
     if without_fix:
         messages[0]["content"] = _synthesis_prompt_at(rev, research_mode)
         if not rev_has_pinpoint_block(rev):
             messages[1]["content"] = strip_pinpoint_block(messages[1]["content"])
+        if not rev_has_court_limits_block(rev):
+            messages[1]["content"] = strip_court_limits_block(messages[1]["content"])
     return messages
 
 
@@ -1495,6 +1529,12 @@ def main(argv: Optional[list] = None) -> int:
               f"{'present' if 'PINPOINTS TO KEEP' in messages[1]['content'] else 'absent'}"
               + (f" ({args.rev} {'has' if rev_has_pinpoint_block(args.rev) else 'predates'}"
                  " P3.1's block)" if args.without_fix else ""))
+        _lims = court_limits_from(turn)
+        print(f"  court's own limits block (P3.50 A1): "
+              f"{'present' if f'[{COURT_LIMIT_HEAD}S' in messages[1]['content'] else 'absent'}"
+              f"; limits found in the turn's judgments: {len(_lims)}"
+              + "".join(f"\n    {l.get('ncn') or l.get('url')} para {l.get('para') or '-'} "
+                        f"(kind {l.get('kind')})" for l in _lims))
     else:
         tool_msgs = [m for m in messages if m.get("role") == "tool"]
         with_outline = sum(1 for m in tool_msgs if "[SECTION OUTLINE" in (m.get("content") or ""))
@@ -1515,6 +1555,19 @@ def main(argv: Optional[list] = None) -> int:
         clean, _ = strip_scope_blocks(content)
         if args.seam in ("synthesis", "manager"):
             clean, _ = apply_lost_disclosure(clean, lost_for_answer, any_completed)
+        if args.seam == "synthesis":
+            # P3.50 (A1): what the draw carries itself, then the answer seam's
+            # restore as the product applies it (without --without-fix).
+            _lims = court_limits_from(turn)
+            carried = [l for l in _lims if l.get("para")
+                       and re.search(rf"\[{l['para']}\]|\bparas?\.?\s*{l['para']}\b"
+                                     rf"|\bparagraphs?\s+{l['para']}\b", clean, re.I)]
+            print(f"      court's limit pinpointed by the draw itself: "
+                  f"{len(carried)} of {len(_lims)}")
+            if not args.without_fix:
+                clean, _r = restore_court_limits(clean, _lims)
+                if _r:
+                    print(f"      restored {_r} court's own limit(s) at the answer seam")
         if args.seam == "manager":
             # What the product does to the Manager's text before the lawyer sees
             # it, in the order `process_user_request` does it.

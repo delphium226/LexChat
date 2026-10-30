@@ -566,6 +566,8 @@ SECTION_FAMILY_LISTED = 5
 SECTION_FAMILIES_PER_BLOCK = 6
 SECTION_FAMILY_SOURCE = "made_under_sections"
 SECTION_FAMILY_HEAD = "ENABLING POWER — the made-under record, for the sections this search returned"
+SECTION_FAMILY_INSERTED_HEAD = ("ENABLING POWER — the made-under record, for the sections a "
+                                "provision this search returned inserts")
 _RETURNED_SECTION = re.compile(
     r"legislation\.gov\.uk/(?:id/)?([a-z]+/\d{4}/\d+)/section/(\d+)([A-Z]*)/?$")
 _FAMILY_PROVISION = re.compile(r"section/(\d+)([A-Z]*)")
@@ -592,6 +594,55 @@ def returned_section_families(raw_result) -> tuple:
         return (act, bases) if act else ("", [])
     except Exception:
         return ("", [])
+
+
+# P3.51 (A2, Session 52): a returned provision that INSERTS a section into
+# another Act. LEX renders the amending text as "After section 33 (...) of the
+# 1987 Act insert— \n\nSection 33A) **Power to modify section 33**": the new
+# section's own heading follows the word "insert". Only a lettered section
+# counts (an inserted section is numbered with a letter), and only where the
+# words just before name the Act it goes into, as "the 1987 Act" or by title.
+_INSERTED_HEAD = re.compile(r"\binsert\b\W{0,8}?\s*Section (\d{1,4})([A-Z]{1,3})\)")
+_AMENDED_ACT = re.compile(
+    r"\b(?:of|In|in|into|to) the (?:(?P<year>\d{4}) Act\b|(?P<title>[A-Z][\w,()'’&. -]{2,150}? "
+    r"Act \d{4})(?: \(c\. ?\d+\)| \(asp \d+\))?)")
+_INSERT_WINDOW = 300
+
+
+def inserted_sections(raw_result) -> list:
+    """`[(ref_kind, ref, base, section, by)]`, each inserted section a section
+    search's rows insert into another Act, in rank order, each once:
+    `ref_kind` "year" (`ref` "1987", from "the 1987 Act") or "title"; `base`
+    "33" and `section` "33A"; `by` the inserting provision's label ("s.8 of
+    asp/2003/10"). [] for anything else. Never raises."""
+    import json
+    out, seen = [], set()
+    try:
+        d = json.loads(raw_result) if isinstance(raw_result, str) else raw_result
+        rows = d.get("results") if isinstance(d, dict) else None
+        for r in rows if isinstance(rows, list) else []:
+            if not isinstance(r, dict):
+                continue
+            m = _RETURNED_SECTION.search(str(r.get("url") or ""))
+            text = str(r.get("text") or "")
+            if not m or not text:
+                continue
+            by = f"s.{m.group(2)}{m.group(3)} of {m.group(1)}"
+            for h in _INSERTED_HEAD.finditer(text):
+                refs = list(_AMENDED_ACT.finditer(text[max(0, h.start() - _INSERT_WINDOW):h.start()]))
+                if not refs:
+                    continue
+                ref = refs[-1]
+                kind, value = (("year", ref.group("year")) if ref.group("year")
+                               else ("title", ref.group("title")))
+                key = (kind, value.lower(), h.group(1) + h.group(2))
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append((kind, value, h.group(1), h.group(1) + h.group(2), by))
+    except Exception:
+        return []
+    return out
 
 
 def handed_families(log) -> set:
@@ -635,8 +686,14 @@ _MARK = {
 
 
 def section_families_block(act_id: str, bases: list, rows: list, cov: dict,
-                           today=None) -> tuple:
+                           today=None, inserted: Optional[list] = None) -> tuple:
     """`(block, entries)` for the sections a section search returned.
+
+    `inserted` (P3.51, A2): `[(section, by), ...]` when the families are those
+    of sections a returned provision inserts into `act_id` (s.33A of the 1987
+    Act, inserted by s.8 of asp/2003/10), not sections the search returned;
+    only the block's opening words change. None (the default) is the
+    returned-sections block, byte for byte.
 
     `rows`: `(provision, legislation_id, title, act_title, revocation,
     revocation_checked)`, every record row under a section of `act_id` whose
@@ -722,9 +779,15 @@ def section_families_block(act_id: str, bases: list, rows: list, cov: dict,
     tail = (f" {more} more of the returned sections have instruments in the record; "
             f"{MADE_UNDER_TOOL} lists them.") if more else ""
     stmt = _plain((cov or {}).get("statement") or "a stated class of instruments.", 1200)
+    if inserted:
+        ins = "; ".join(f"s.{sec}, inserted by {by}" for sec, by in inserted)
+        opening = (f"\n\n[{SECTION_FAMILY_INSERTED_HEAD} into the {act} ({act_id}) ({ins}), "
+                   "and the lettered sections beside them: ")
+    else:
+        opening = (f"\n\n[{SECTION_FAMILY_HEAD} of the {act} ({act_id}) and the lettered sections "
+                   "beside them: ")
     block = (
-        f"\n\n[{SECTION_FAMILY_HEAD} of the {act} ({act_id}) and the lettered sections beside "
-        "them: instruments whose own preamble names the section given as a power they were "
+        opening + "instruments whose own preamble names the section given as a power they were "
         "made under. " + " ".join(lines) + tail + " You MAY state that an instrument named "
         "here was made under the section given for it, citing the instrument; where only a "
         f"count is given, call {MADE_UNDER_TOOL} for that section before naming any other. "

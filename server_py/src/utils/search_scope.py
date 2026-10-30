@@ -2990,12 +2990,20 @@ _OUTLINE_BLOCK = re.compile(
 _FETCHED_BLOCK = re.compile(
     r"\[PROVISION FETCHED BY CODE[^\]]*\][\s\S]*?\[/PROVISION FETCHED BY CODE\]", re.I
 )
+# P3.50 (A1): the court's own limit on its decision, for the Worker
+# (`court_limits.court_limit_note`) and the synthesis (`court_limits_block`).
+# Its body is the judgment's words, so a report that quotes it is doing its
+# job; an echo of the block, markers and all, goes, as `_FETCHED_BLOCK` does.
+_LIMIT_BLOCK = re.compile(
+    r"\[COURT['’]S OWN LIMITS?[^\]]*\][\s\S]*?\[/COURT['’]S OWN LIMITS?\]", re.I
+)
 # P3.27 adds `SCHEDULES AND ANNEXES` (`schedule_units.schedules_note`). Not
 # the bare word "SCHEDULES": the pattern is case-insensitive, and a lawyer's
 # answer can open a citation link with it ("[Schedules 1 and 2](...)").
 _TOOL_BLOCK = re.compile(
     r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
-    r"|SECTION OUTLINE|SCHEDULES AND ANNEXES —|PROVISION FETCHED BY CODE)"
+    r"|SECTION OUTLINE|SCHEDULES AND ANNEXES —|PROVISION FETCHED BY CODE"
+    r"|COURT['’]S OWN LIMITS?)"
     r"[^\[\]]*\]",
     re.I,
 )
@@ -3012,7 +3020,7 @@ _TOOL_BLOCK = re.compile(
 # dash.
 _BARE_TAG = re.compile(
     r"(`?)\[(SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
-    r"|SECTION OUTLINE|PROVISION FETCHED BY CODE)\]\1( ?)",
+    r"|SECTION OUTLINE|PROVISION FETCHED BY CODE|COURT['’]S OWN LIMITS?)\]\1( ?)",
     re.I,
 )
 
@@ -4737,6 +4745,8 @@ def strip_scope_blocks(text: str) -> tuple:
     out, n1 = _PINPOINT_BLOCK.subn("", out)
     out, n3 = _OUTLINE_BLOCK.subn("", out)
     out, n4 = _FETCHED_BLOCK.subn("", out)
+    out, n6 = _LIMIT_BLOCK.subn("", out)
+    n4 += n6
     # P4.22: a bare tag a sentence names, before `_TOOL_BLOCK` would delete it.
     out, n5 = _BARE_TAG.subn(_bare_tag, out)
     out, n2 = _TOOL_BLOCK.subn("", out)
