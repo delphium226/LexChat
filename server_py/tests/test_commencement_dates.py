@@ -789,11 +789,13 @@ def test_the_lawyer_footer_clauses_say_where_a_date_came_from():
     assert "not whether it has been amended or repealed since" in rel_new
     cur_new = ss._currency_footer_clause(_logs(_dated()))
     assert cur_new == (
+        # P4.20: the record is named once, in P3.5's clause; this one points at it.
         " Whether legislation is in force is not something this index reports; what was "
-        "checked is the recorded changes for asp/1901/1, which name the instruments involved "
-        "provision by provision, and, for the commencements of asp/1901/1 made by another "
+        "checked is those recorded changes, which name the instruments involved "
+        "provision by provision, and, for their commencements made by another "
         "instrument, the date legislation.gov.uk's Changes to Legislation record gives for "
         "each. Neither is a check of whether a provision has since been amended or repealed.")
+    assert "recorded changes for asp/1901/1, which this research consulted directly" in rel_new
 
 
 # ---------------------------------------------------------------------------
