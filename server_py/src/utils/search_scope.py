@@ -908,6 +908,19 @@ def record_made_under(log: Optional[list], data: Any) -> None:
                 if st == "partly":
                     named["partly"].append(lid)
             entry["revoked_ids"] = named
+            # P3.48 (answer seam): each listed instrument the record shows as
+            # revoked in whole or in part, with its title and the record's
+            # line, so `utils.revocation_marks` can mark it where the answer
+            # names it unmarked.
+            entry["revoked"] = {
+                str(i.get("legislation_id"))[:60]: {
+                    "status": i.get("revocation_status"),
+                    "title": str(i.get("title") or "")[:200],
+                    "line": str(i.get("revocation") or "")[:400],
+                    "checked": rv.get("checked")}
+                for i in d.get("instruments") or []
+                if i.get("legislation_id") and i.get("revocation_status") in (
+                    "revoked", "revoked_undated", "revoked_later", "partly")}
         log.append(entry)
     except Exception:
         pass

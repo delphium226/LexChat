@@ -35,6 +35,7 @@ from ..utils.instrument_lookup import (
 )
 from ..utils.lawyer_words import with_lawyer_words
 from ..utils.made_under import prune_section_family_entries
+from ..utils.revocation_marks import mark_revoked_instruments
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
 from ..utils.paragraph_restore import (
@@ -1237,6 +1238,14 @@ async def process_user_request(
                 clean, manager_inputs, retrieved_sources, retrieved_titles)
             if _linked:
                 logger.info("[Manager] Linked %d instrument(s) named in words", _linked)
+            # P3.48 (user decision): an instrument the answer names that the
+            # turn's made-under record shows as revoked, in whole or in part,
+            # and that the answer does not mark, is marked after its first
+            # mention. After P4.23, so a revoking instrument the mark names
+            # is never linked; above P1.6 and lever R.
+            clean, _marks = mark_revoked_instruments(clean, all_searches)
+            if _marks:
+                logger.info("[Manager] Marked %d recorded revocation(s)", _marks)
     # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
     # the Manager is instructed to pass it through verbatim and is not compelled
     # to — and in conversational mode it answers in its own words. Idempotent, so

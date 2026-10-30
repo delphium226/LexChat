@@ -655,6 +655,7 @@ def section_families_block(act_id: str, bases: list, rows: list, cov: dict,
         if sec not in e["secs"]:
             e["secs"].append(sec)
         checked = row[5] if len(row) > 5 else None
+        e["checked"] = str(checked)[:10] if checked else None
         flag = _rev_flag(row[4] if len(row) > 4 else None)
         try:
             e["cat"] = category(flag, today) if checked else "unchecked"
@@ -699,7 +700,14 @@ def section_families_block(act_id: str, bases: list, rows: list, cov: dict,
                         "act_id": act_id, "family": base, "act": act[:160],
                         "provision": ", ".join(f"section/{s[2:]}" for s in secs)[:60],
                         "count": len(insts), "listed": len(named), "coverage": label[:200],
-                        "named": [[lid, _short(insts[lid]["title"], 160)] for lid in named]})
+                        "named": [[lid, _short(insts[lid]["title"], 160)] for lid in named],
+                        # P3.48 (answer seam): a named instrument this block
+                        # marks, for `utils.revocation_marks`.
+                        "revoked": {lid: {"status": insts[lid]["cat"],
+                                          "title": _short(insts[lid]["title"], 160),
+                                          "checked": insts[lid].get("checked")}
+                                    for lid in named
+                                    if insts[lid]["cat"] in ("partly", "revoked_later")}})
         entries.extend({"tool": "enabling_power", "legislation_id": lid[:60], "stated": True,
                         "source": SECTION_FAMILY_SOURCE,
                         "title": _short(insts[lid]["title"], 160)} for lid in named)

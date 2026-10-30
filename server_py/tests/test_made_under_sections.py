@@ -102,7 +102,12 @@ def test_a_small_family_is_listed_by_title_with_its_lettered_sibling():
                     "coverage": COV["label"],
                     "named": [["ssi/2002/41", "The Widget (Local Connection) (Scotland) Order 2002"],
                               ["ssi/2022/356",
-                               "The Widget (Suspension of Referrals) (Scotland) Order 2022"]]}]
+                               "The Widget (Suspension of Referrals) (Scotland) Order 2022"]],
+                    # P3.48: the named instrument the block marks, for the answer seam.
+                    "revoked": {"ssi/2002/41": {
+                        "status": "partly",
+                        "title": "The Widget (Local Connection) (Scotland) Order 2002",
+                        "checked": "2026-10-10"}}}]
     assert [(e["legislation_id"], e["stated"]) for e in entries if e["tool"] == "enabling_power"] == [
         ("ssi/2002/41", True), ("ssi/2022/356", True)]
 
