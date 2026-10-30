@@ -1683,10 +1683,20 @@ def retrieved_enabling(turn: dict) -> list:
             for m in _STORED_RECITAL.finditer(str(tl.get("final_result") or "")):
                 if m.group(1) not in [x[0] for x in out]:
                     out.append((m.group(1), "made-under record (stored recital)"))
+            # P3.51: a section search's block naming the record's instruments
+            # for the sections it returned (the Act's own id opens the block).
+            for m in _FAMILY_BLOCK.finditer(str(tl.get("final_result") or "")):
+                ids = _BLOCK_ID.findall(m.group(0))
+                for lid in ids[1:]:
+                    if lid not in [x[0] for x in out]:
+                        out.append((lid, "made-under record (returned sections)"))
     return out
 
 
 _STORED_RECITAL = re.compile(r"the made-under record \(the as-made preamble of ([a-z]+/\d{4}/\d+)")
+_FAMILY_BLOCK = re.compile(
+    r"\[ENABLING POWER — the made-under record, for the sections this search returned[^\[\]]*\]")
+_BLOCK_ID = re.compile(r"\(([a-z]+/\d{4}/\d+)\)")
 
 
 # P2.3's own clause on the lawyer-facing footer contains the words "made under"
@@ -7539,6 +7549,10 @@ LK_BLAME = re.compile(
 # The clause P3.7's code writes into the lawyer's footer for a looked-up
 # instrument. Read from the footer only.
 LK_FOOTER = re.compile(r"looked up by (?:its |their )?numbers?", re.I)
+# P3.38's footer clause: "The text of SSI 2025/377 (as made) was read from
+# legislation.gov.uk." Read from the footer only, one sentence at a time.
+LK_FOOTER_READ = re.compile(r"\bThe text of .{1,400}? was read from legislation\.gov\.uk\b", re.I)
+LK_NOT_HELD_WORDS = re.compile(r"\bnot held\b", re.I)
 # **A sentence that refers BACK to the instrument is about it too.** Found on
 # `wave4_p37c`: three answers said "This index does not hold the instrument
 # itself" on turns asking only about SSI 2025/377, and the number-only
@@ -7657,6 +7671,14 @@ def lookup_rows(doc: dict) -> list:
                     kinds[k] += 1
                     sents.append((k, s))
             p = probes_all[lid]
+            # P3.38 (Session 50): what the code footer says of THIS instrument,
+            # sentence by sentence, so another instrument's clause is not
+            # credited to the slot.
+            foot_sents = _sentences(footer or "")
+            footer_not_held = any(LK_FOOTER.search(s) and mrx.search(s)
+                                  and LK_NOT_HELD_WORDS.search(s) for s in foot_sents)
+            footer_read = any(mrx.search(m.group(0))
+                              for m in LK_FOOTER_READ.finditer(footer or ""))
             rows.append({
                 "session": base, "run": str(doc.get("session_id")), "rep": doc.get("rep", 1),
                 "turn": n, "src_turn": src, "lid": lid, "state": state, "graded": graded,
@@ -7668,6 +7690,8 @@ def lookup_rows(doc: dict) -> list:
                 "earlier_not_held": lid in earlier_not_held,
                 "kinds": kinds, "sentences": sents,
                 "footer_lookup": bool(LK_FOOTER.search(footer or "")),
+                "footer_not_held": footer_not_held,
+                "footer_read": footer_read,
                 "links": len(MD_LINK.findall(ans)),
                 "sources_kept": int((t.get("timing") or {}).get("sources_kept") or 0),
                 "prose": len(prose),
@@ -7690,6 +7714,15 @@ def lookup_verdict(r: dict) -> tuple:
             return "FAIL", "questions the citation"
         earned = "not_held" in p["lookup"] or r["earlier_not_held"]
         if not k["record_absent"]:
+            # P3.38 (user decision, Session 50): once code has read this
+            # instrument's text from legislation.gov.uk, the answer may lead
+            # with what the text provides and leave "not held" to the code
+            # footer, where the footer says both of it, a lookup in this turn
+            # said not held, and the prose does not hedge. `wave5_p338`'s four
+            # findings were each that shape.
+            if (r.get("footer_not_held") and r.get("footer_read")
+                    and "not_held" in p["lookup"] and not k["hedged"]):
+                return "PASS", "answered from the text read; the footer says not held"
             return "FAIL", "prose does not say it is not held"
         if not earned:
             return "FAIL", "not-held stated without a lookup saying so"
@@ -10124,6 +10157,13 @@ def _cd_in_force_items(entry: dict) -> list:
     return out
 
 
+# P3.38's block: its header (the instrument's "cite it as" URL; "Below is the
+# whole of it." or a summary), then the text, then the closing marker.
+_CD_PUBLISHED = re.compile(
+    r"(\[PROVISION FETCHED BY CODE — this index (?:lacks|'s text read gave no text for|holds the "
+    r"record of) [^\]]*?cite it as (\S+?), [^\]]*\])\n(.*?)\n\[/PROVISION FETCHED BY CODE\]", re.S)
+
+
 def cd_evidence(turn: dict, turn_no=None) -> dict:
     """Every commencement date this turn's tools returned or showed, with what
     it is stated for: {"items": [...], "titles": {lid: title}, "statuses":
@@ -10251,6 +10291,17 @@ def cd_evidence(turn: dict, turn_no=None) -> dict:
                     add_text(str(desc), "description", rlid, nm)
                     for it in ev["items"][before:]:
                         it["subject"] = next(iter(sorted(it["named"] - {rlid})), None)
+            # P3.38: an instrument's text code read from legislation.gov.uk, in
+            # the block it appends to a lookup, a text read or a section search
+            # (Session 50: regulation 4 of SSI 2025/119's "31 March 2025", read
+            # this way, graded UNSUPPORTED). Whole, it is the instrument's text;
+            # summarised, it supports nothing, as any summary.
+            fin = tl.get("final_result")
+            if isinstance(fin, str) and "PROVISION FETCHED BY CODE" in fin:
+                for m in _CD_PUBLISHED.finditer(fin):
+                    plid = re.sub(r"/(?:made|enacted)$", "", _nc_lid(m.group(2)) or "")
+                    add_text(m.group(3), "text (legislation.gov.uk)"
+                             if "Below is the whole of it." in m.group(1) else "summary", plid, nm)
             if tl.get("summarised") and isinstance(tl.get("final_result"), str):
                 # A summary is the summariser's text, not a source: on the
                 # stored 6411 runs summaries of a change record (which carries
@@ -10651,7 +10702,17 @@ def cmd_jurisdiction(args) -> int:
 # deliberately NOT the product's own keep test (`utils/source_naming.py`): a
 # grader built from the code it grades cannot see that code's mistakes.
 
-RAIL_BAR = 0.15  # P4.3 (ii): the reader-unused rate on report turns, per chat mode
+# P4.3 (ii)'s bar was the reader-unused rate on report turns, per chat mode. P3.56
+# (user decision, option (b)) took it out of the bar: 127 of 140 unused entries
+# were rightly left out of the answer and 121 of 140 are kept because the Worker
+# retrieved their text, so the rate measures retrieval breadth, not the answer.
+# It is printed as a watch item, marked against this line.
+RAIL_BAR = 0.15
+# P3.56: a References list is not a report's prose. The measurement's own
+# heading tests (`p356_table.py`), so the grader counts what it judged.
+_RAIL_REF_HEAD = re.compile(
+    r"^\s*(#+\s*|\*\*)?\s*(references|sources|bibliography|authorities consulted)\b", re.I)
+_RAIL_HEAD = re.compile(r"^\s*(#+\s|\*\*[^*]+\*\*\s*$)")
 _RAIL_URL_ANY = re.compile(r"https?://[^\s)\]>\"'<]+", re.I)
 # A regnal-year id has four segments (`ukpga/geo6/14/51`): read as three, every
 # Act of one session was "cited" by any other (batch 11 C, 36 report verdicts).
@@ -10842,6 +10903,23 @@ def _rail_text_index(text: str) -> tuple:
     return text, _rail_norm_text(text), {_rail_lid_of_url(u) for u in leg} - {""}, case
 
 
+def rail_report_prose(report: str) -> str:
+    """A report's own prose: its lines outside a References/Sources list (a
+    heading of that name opens one, the next heading closes it). The caller
+    strips the scope blocks first, so a code-derived block is not prose either."""
+    out = []
+    in_ref = False
+    for ln in (report or "").splitlines():
+        if _RAIL_REF_HEAD.match(ln):
+            in_ref = True
+            continue
+        if in_ref and _RAIL_HEAD.match(ln):
+            in_ref = False
+        if not in_ref:
+            out.append(ln)
+    return "\n".join(out)
+
+
 def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
     """One turn's rail, graded. The turn classes are batch 10 C's census:
 
@@ -10860,6 +10938,11 @@ def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
     does not reference it. An unvouched source the answer cites is what P4.3's
     lever R puts in the rail at the answer seam, not the fall-back; on every
     stored directory before lever R the two tests flag the same turns.
+
+    `dropped` (P3.56) is the bar's other half: a source the answer does not
+    reference that a completed report names in its own prose (scope blocks
+    stripped, a References list left out), i.e. one the report used and the
+    answer left out.
     """
     doc = doc or {}
     answer = t.get("answer") if isinstance(t.get("answer"), str) else ""
@@ -10895,14 +10978,19 @@ def rail_turn(t: dict, doc: Optional[dict] = None) -> dict:
     rep_text = ("\n".join(strip(d.get("report") or "")[0] for d in dgs if done(d))
                 if cls == "report" else "")
     r_idx = _rail_text_index(rep_text)
+    prose = rail_report_prose(rep_text)
+    p_idx = _rail_text_index(prose)
     for s in audit.get("sources") or []:
         reader = rail_reader(s, *b_idx)
         token = _source_cited(s, body)
         unvouched = bool(cls == "report" and not s.get("excerpt")
                          and not rail_reader(s, *r_idx) and not _source_cited(s, rep_text))
+        dropped = bool(cls == "report" and not reader
+                       and (rail_reader(s, *p_idx) or _source_cited(s, prose)))
         out["sources"].append({"src": s, "reader": reader, "token": token,
                                "unvouched": unvouched,
-                               "fallback": unvouched and not reader})
+                               "fallback": unvouched and not reader,
+                               "dropped": dropped})
     return out
 
 
@@ -10911,11 +10999,13 @@ def _rail_key(s: dict) -> str:
 
 
 def cmd_rail(args) -> int:
-    """P4.3's grader: the unused-source rate on report turns by the reader test,
-    per chat mode, and the report turns whose rail no report vouched for (the
-    fall-back). Exit 1 if any such turn exists, or any chat mode's rate is over
-    `RAIL_BAR`. `--drops` lists every source on which the reader and the token
-    test disagree, and every unvouched source: the both-ways audit."""
+    """P4.3's grader: the report turns whose rail no report vouched for (the
+    fall-back), and the sources a report used in its own prose that the answer
+    dropped (P3.56). Exit 1 if either exists. The unused-source rate by the
+    reader test, per chat mode, and the share of those kept for an excerpt, are
+    printed as a watch item (P3.56 took the rate out of the bar). `--drops` lists
+    every source on which the reader and the token test disagree, every
+    unvouched source and every dropped one: the both-ways audit."""
     root = Path(args.dir)
     exclude = {x for x in (args.exclude or "").split(",") if x}
     dirs = ([p for p in sorted(root.iterdir()) if p.is_dir() and p.name not in exclude]
@@ -10945,11 +11035,15 @@ def cmd_rail(args) -> int:
                 unused = sum(1 for x in g["sources"] if not x["reader"])
                 tok_unused = sum(1 for x in g["sources"] if not x["token"])
                 unv = sum(1 for x in g["sources"] if x["fallback"])
+                exc = sum(1 for x in g["sources"] if not x["reader"] and x["src"].get("excerpt"))
+                dropped = sum(1 for x in g["sources"] if x["dropped"])
                 ans_only = sum(1 for x in g["sources"] if x["unvouched"] and not x["fallback"])
                 for k in (m, "all"):
                     tally[(k, "turns")] += 1
                     tally[(k, "sources")] += n
                     tally[(k, "unused")] += unused
+                    tally[(k, "excerpt_kept")] += exc
+                    tally[(k, "dropped")] += dropped
                     tally[(k, "token_unused")] += tok_unused
                     tally[(k, "fallback_turns")] += bool(unv)
                     tally[(k, "unvouched")] += unv
@@ -10964,6 +11058,9 @@ def cmd_rail(args) -> int:
                         drops.append(f"  {'READER-ONLY ' + x['reader'] if x['reader'] else 'TOKEN-ONLY':<22}"
                                      f" {where}  {s.get('kind')}  {_rail_key(s)[:70]}"
                                      f"  | {(s.get('title') or '')[:args.chars]}")
+                    if x["dropped"]:
+                        drops.append(f"  {'DROPPED':<22} {where}  {s.get('kind')}  "
+                                     f"{_rail_key(s)[:70]}  | {(s.get('title') or '')[:args.chars]}")
                     if x["unvouched"]:
                         drops.append(f"  {'UNVOUCHED' if x['fallback'] else 'ANSWER-ONLY':<22} "
                                      f"{where}  {s.get('kind')}  "
@@ -10974,8 +11071,8 @@ def cmd_rail(args) -> int:
                                          ("report", "report_mixed", "no_report",
                                           "no_delegation", "unanswered")))
     print(f"  {'report turns with a rail':<34} {'turns':>6} {'sources':>8} "
-          f"{'unused (reader)':>18} {'token test':>14} {'fall-back turns':>16} {'cite none':>10}")
-    fail = False
+          f"{'unused (reader)':>18} {'token test':>14} {'fall-back turns':>16} {'cite none':>10}"
+          f" {'dropped':>8}")
     for k in _RAIL_MODES + ("all",):
         n = tally[(k, "sources")]
         if not tally[(k, "turns")]:
@@ -10983,14 +11080,21 @@ def cmd_rail(args) -> int:
         u = tally[(k, "unused")]
         rate = u / n if n else 0.0
         over = k != "all" and rate > RAIL_BAR
-        fail |= over
         print(f"  {k:<34} {tally[(k, 'turns')]:>6} {n:>8} "
               f"{u:>8} ({100 * rate:4.1f}%){'*' if over else ' '} "
               f"{tally[(k, 'token_unused')]:>6} ({100 * tally[(k, 'token_unused')] / n:3.0f}%) "
               f"{tally[(k, 'fallback_turns')]:>8} ({tally[(k, 'unvouched')]} src) "
-              f"{tally[(k, 'cite_none')]:>6}")
+              f"{tally[(k, 'cite_none')]:>6} {tally[(k, 'dropped')]:>8}")
     fb = tally[("all", "fallback_turns")]
-    fail |= bool(fb)
+    dr = tally[("all", "dropped")]
+    fail = bool(fb) or bool(dr)
+    print("  watch item (not the bar since P3.56): the unused share by chat mode above,"
+          f" * = over {RAIL_BAR:.0%}")
+    print("  unused sources kept because their text was retrieved (excerpt): "
+          + ", ".join(f"{k} {tally[(k, 'excerpt_kept')]} of {tally[(k, 'unused')]}"
+                      + (f" ({100 * tally[(k, 'excerpt_kept')] / tally[(k, 'unused')]:.0f}%)"
+                         if tally[(k, 'unused')] else "")
+                      for k in _RAIL_MODES + ("all",) if tally[(k, "turns")]))
     print(f"  sources no report vouched for that the answer cites (lever R re-admits these; "
           f"not the fall-back): {tally[('all', 'answer_only')]}")
     print(f"  reader vs token test: reader-only {tally['reader_only']}, token-only "
@@ -10998,13 +11102,133 @@ def cmd_rail(args) -> int:
     print(f"  fall-back detector vs the product counter (timing.source_filter_fallback):"
           f" both {agree[(True, True)]}, detector only {agree[(True, False)]},"
           f" counter only {agree[(False, True)]}, neither {agree[(False, False)]}")
-    print(f"  bar: 0 fall-back turns and each chat mode <= {RAIL_BAR:.0%} unused: "
-          f"{'NOT MET' if fail else 'MET'}  (* = over the bar)")
+    print(f"  bar: 0 fall-back turns and 0 sources a report used in its own prose that the "
+          f"answer dropped: {'NOT MET' if fail else 'MET'}  ({fb} fall-back turns, {dr} dropped)")
     if args.drops:
         print("\n  -- every disagreement and every unvouched source --")
         for ln in drops:
             print(ln)
     return 1 if fail else 0
+
+
+# ---------------------------------------------------------------------------
+# P3.53 — `listcov`: a question about which of a listed set has a property
+# ---------------------------------------------------------------------------
+#
+# Applies where the product's own gate fires (`search_scope.list_coverage`, on
+# the scope record rebuilt from the turn's audit): a made-under list of 5 or
+# more, and section searches with one query over 2 or more of its instruments,
+# across every delegation of the turn. M of N searched:
+#   M < N  PASS when the answer or its footer states how many were not checked
+#          and the body asserts nothing of the unchecked ("highly likely to
+#          contain"); the statement may be a count ("the other 33 were not
+#          checked") or "only 4 of the 37".
+#   M = N  PASS when the body states the negative over the rest ("the remaining
+#          19 ... were searched and no instances were found").
+# Validated against Session 51's hand labels (`evidence/seam/s51/p353`).
+_LC_LIKELY = re.compile(
+    r"\b(?:highly |very |most )?likely (?:to )?(?:contain|also|include|feature)"
+    r"|\bprobably (?:contain|also|feature)|\bpresumably\b|\bit is likely that", re.I)
+_LC_NEG = re.compile(
+    r"\b(?:remaining|other)\s+(?:\d+\s+)?[^.\n]{0,80}?(?:do not|did not|does not|no instances"
+    r"|no occurrences|not (?:found|feature|contain)|were not found)"
+    r"|were searched,? and no instances|\bdo not contain the\b"
+    r"|\bno (?:instances|occurrences) of (?:the |a )?[\"'‘’“”]?£", re.I)
+_LC_CHECKED = r"(?:searched|checked|examined|reviewed|queried|individually)"
+
+
+_LC_WORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+             "ten", "eleven", "twelve")
+# M = N, and the answer says the check did not reach it (a lost step: `wave4_p333` 6382 r2,
+# r3, "were not established, as the research steps ... did not return their findings").
+_LC_NOT_DONE = re.compile(
+    r"\bnot (?:been )?(?:established|checked|examined|reviewed)\b|did not return (?:its|their) "
+    r"findings", re.I)
+
+
+def _lc_states_unchecked(text: str, n: int, m: int) -> bool:
+    rest = n - m
+    num = rf"(?:{rest}|{_LC_WORDS[rest]})" if rest < len(_LC_WORDS) else str(rest)
+    pats = (
+        rf"\b{num}\b(?:\s+(?:other|remaining|further))?[^.\n]{{0,80}}?\bnot\b[^.\n]{{0,30}}?"
+        rf"\b{_LC_CHECKED}",
+        rf"\bonly\s+{m}\b[^.\n]{{0,60}}?\b{n}\b",
+        rf"\b{m}\s+(?:of|out of)\s+(?:the\s+|these\s+|those\s+)?{n}\b[^.\n]{{0,100}}?\b{_LC_CHECKED}",
+    )
+    return any(re.search(p, text or "", re.I) for p in pats)
+
+
+def listcov_log(turn: dict) -> list:
+    """The turn's scope record as the product keeps it, rebuilt from the audit:
+    the made-under lists and the section searches, across every delegation."""
+    from src.utils.search_scope import record_enabling_power, record_made_under  # noqa: PLC0415
+    log = []
+    for dg in (turn.get("audit") or {}).get("delegations") or []:
+        for tl in dg.get("tools") or []:
+            name, a = tl.get("name"), tl.get("args") or {}
+            if name == "get_legislation_text":
+                record_enabling_power(log, name, a, tl.get("raw_result"))
+            elif name == "find_instruments_made_under":
+                raw = str(tl.get("raw_result") or "").lstrip()
+                try:
+                    record_made_under(log, json.JSONDecoder().raw_decode(raw)[0])
+                except Exception:  # noqa: BLE001
+                    continue
+            elif name == "search_legislation_sections":
+                log.append({"tool": name, "query": str(a.get("query") or "")[:200],
+                            "legislation_id": str(a.get("legislation_id") or "")[:60]})
+    return log
+
+
+def listcov_turn(turn: dict) -> Optional[dict]:
+    """None where the gate does not fire; else the coverage and the verdict."""
+    from src.utils.search_scope import list_coverage  # noqa: PLC0415
+    cov = list_coverage(listcov_log(turn))
+    if not cov:
+        return None
+    answer = turn.get("answer") or ""
+    body = _without_footer(answer)
+    n, m = cov["N"], cov["M"]
+    if not body.strip():
+        return dict(cov, verdict="UNANSWERED", why="no body")
+    if m < n:
+        likely = _LC_LIKELY.search(body)
+        stated = _lc_states_unchecked(answer, n, m)
+        if likely:
+            return dict(cov, verdict="FAIL", why=f"asserts of the unchecked: {likely.group(0)!r}")
+        return dict(cov, verdict="PASS" if stated else "FAIL",
+                    why="states the count not checked" if stated else "no count not checked")
+    neg = _LC_NEG.search(body)
+    if neg:
+        return dict(cov, verdict="PASS", why="states the negative")
+    # About the term itself, not P4.5's banner on a lost step (`wave4_p331` 6382 r2).
+    q = cov["query"].casefold()
+    if any(_LC_NOT_DONE.search(s) and q in s.casefold() for s in _sentences(body)):
+        return dict(cov, verdict="PASS", why="says the check did not reach the answer")
+    return dict(cov, verdict="FAIL", why="negative unstated")
+
+
+def cmd_listcov(args) -> int:
+    """P3.53's grader. Exit 1 if any applicable turn fails."""
+    root = Path(args.dir)
+    dirs = sorted(p for p in root.iterdir() if p.is_dir()) if args.all else [root]
+    tally = Counter()
+    for d in dirs:
+        for doc in sorted(load_runs(d), key=lambda x: (str(x.get("session_id")), x.get("rep", 1))):
+            for t in doc.get("turns") or []:
+                g = listcov_turn(t)
+                if not g:
+                    continue
+                branch = "M<N" if g["M"] < g["N"] else "M=N"
+                tally[(branch, g["verdict"])] += 1
+                print(f"  {g['verdict']:<10} {branch} {d.name}/{doc.get('session_id')} "
+                      f"rep{doc.get('rep', 1)} t{t.get('turn')} {t.get('chat_mode') or ''}  "
+                      f"{g['M']} of {g['N']} for \"{g['query']}\"  [{g['why']}]")
+    print(f"\nlistcov (P3.53) over {args.dir}{' (every subdirectory)' if args.all else ''}")
+    for b in ("M<N", "M=N"):
+        print(f"  {b}: PASS {tally[(b, 'PASS')]}, FAIL {tally[(b, 'FAIL')]}, "
+              f"unanswered {tally[(b, 'UNANSWERED')]}")
+    return 1 if tally[("M<N", "FAIL")] + tally[("M=N", "FAIL")] else 0
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -11379,9 +11603,9 @@ def main(argv: Iterable[str] | None = None) -> int:
                     help="print every sentence naming a nation, EXPLICIT or IMPLICIT")
     jx.add_argument("--chars", type=int, default=240)
     rl = sub.add_parser("rail",
-                        help="P4.3's grader: the unused-source rate on report turns by the "
-                             "careful-reader test, per chat mode, and the rails no report "
-                             "vouched for (exit 1 if over the bar)")
+                        help="P4.3's grader: the rails no report vouched for, and the sources "
+                             "a report used in its prose that the answer dropped (exit 1 if "
+                             "either); the careful-reader unused rate per chat mode is a watch item")
     rl.add_argument("--all", action="store_true",
                     help="--dir is the replay ROOT: walk every subdirectory")
     rl.add_argument("--exclude", default="",
@@ -11389,8 +11613,14 @@ def main(argv: Iterable[str] | None = None) -> int:
                          "(e.g. baseline,wave1, the pre-P2.1 sweeps)")
     rl.add_argument("--drops", action="store_true",
                     help="list every source on which the reader and the token test "
-                         "disagree, and every unvouched source")
+                         "disagree, every unvouched source and every dropped one")
     rl.add_argument("--chars", type=int, default=80)
+    lv = sub.add_parser("listcov",
+                        help="P3.53's grader: where a made-under list was section-searched "
+                             "with one query, the answer states the count not checked (M<N) "
+                             "or the negative over the rest (M=N); exit 1 on a FAIL")
+    lv.add_argument("--all", action="store_true",
+                    help="--dir is the replay ROOT: walk every subdirectory")
     args = p.parse_args(list(argv) if argv is not None else None)
     return {
         "summary": cmd_summary,
@@ -11429,6 +11659,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         "cmcdates": cmd_cmcdates,
         "jurisdiction": cmd_jurisdiction,
         "rail": cmd_rail,
+        "listcov": cmd_listcov,
     }[args.cmd](args)
 
 

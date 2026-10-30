@@ -43,6 +43,15 @@ same proxy. The feed carries no made date (every attribute and element of
 null on 156 of 157 commencing instruments). **A date whose instrument's made
 date could not be read is not given**: it could not be checked.
 
+**A date still to come (P3.54).** The record dates a commencement the
+commencing instrument has made but that has not yet taken effect (SSI 2026/274
+brings s.19 of asp/2025/2 into force on 2 November 2026). An entry whose
+`in_force` is after today's date also carries ``"date_still_to_come": true``,
+and the status counts those relations in ``still_to_come``; neither key appears
+where every date is today or earlier, so that output is unchanged. "Today" is
+`date.today()`, the source the Worker prompt's date line uses (P3.33's
+`revocation_record._today`).
+
 Product code never imports `tools/lgu_probe.py`: the parser below is a
 re-implementation of its `parse_effects_feed`, keeping only what is used.
 """
@@ -54,6 +63,7 @@ import re
 import time
 import uuid
 import xml.etree.ElementTree as ET
+from datetime import date as _date
 from typing import Any, Callable, Optional
 from urllib.parse import quote
 
@@ -248,12 +258,32 @@ def feed_date_index(effects: list, subject: str) -> dict:
     return idx
 
 
-def apply_dates(slimmed: dict, feed: dict, made: dict) -> dict:
+def mark_dates_to_come(record: dict, today: Optional[str] = None) -> dict:
+    """P3.54: mark each dated entry whose `in_force` is after `today` (default:
+    today's date) with ``"date_still_to_come": true``, and count those relations
+    in the status as ``still_to_come``. Modifies `record` in place and returns
+    it; with no such entry it adds nothing at all."""
+    t = today or _date.today().isoformat()
+    later = 0
+    for g in commencing_groups(record):
+        for e in g["changes"]:
+            if isinstance(e, dict) and isinstance(e.get("in_force"), str) and e["in_force"] > t:
+                e["date_still_to_come"] = True
+                later += len(e.get("changed") or [])
+    st = record.get("commencement_dates")
+    if later and isinstance(st, dict):
+        st["still_to_come"] = later
+    return record
+
+
+def apply_dates(slimmed: dict, feed: dict, made: dict, today: Optional[str] = None) -> dict:
     """Date each listed commencement relation by another instrument.
 
     `feed` is ``{"status": "ok", "effects", "total", "read"}`` or ``{"status":
     "failed", "reason"}``; `made` maps an instrument to its made date, or to
-    None where it could not be read (or was not read: the cap). Returns a new
+    None where it could not be read (or was not read: the cap). A date after
+    `today` (default: today's date) is marked as still to come (P3.54,
+    `mark_dates_to_come`). Returns a new
     dict; `slimmed` is not modified. On a failed feed the record is returned
     as it was, with the status saying the dates were not retrieved.
     """
@@ -333,7 +363,7 @@ def apply_dates(slimmed: dict, feed: dict, made: dict) -> dict:
     if feed.get("total") is not None and feed.get("read", 0) < feed["total"]:
         status["feed_window"] = {"read": feed.get("read", 0), "total": feed["total"]}
     out["commencement_dates"] = status
-    return out
+    return mark_dates_to_come(out, today)
 
 
 # ---------------------------------------------------------------------------

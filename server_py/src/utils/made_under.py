@@ -475,6 +475,11 @@ def revocation_note(d: dict) -> str:
     )
 
 
+# P3.53: the made-under block's note on a list question, from this many listed
+# (`search_scope.LIST_COVERAGE_MIN_LISTED`, the scope line's gate).
+LIST_NOTE_MIN = 5
+
+
 def made_under_note(raw_result) -> str:
     r"""The block appended to a `find_instruments_made_under` result.
 
@@ -500,11 +505,15 @@ def made_under_note(raw_result) -> str:
         n, listed = int(d.get("count") or 0), len(d.get("instruments") or [])
         more = (f" Only {listed} of the {n} are listed here; say how many there are, and "
                 "that the list shown is not all of them.") if listed < n else ""
+        # P3.53: a question about which of the listed instruments has a
+        # property was answered from 2-8 of 37 (`search_scope.list_coverage`).
+        each = (f" {listed} listed; if the question asks which of them have a property, "
+                "search each or say which you did not.") if listed >= LIST_NOTE_MIN else ""
         return (
             f"\n\n[ENABLING POWER — the made-under record: each instrument listed above "
             f"has its own preamble naming {prov} of the {act} as a power it was made "
             f"under ({n} instrument(s)). You MAY state that each of them was made under "
-            f"that provision, citing the instrument.{more} The record covers {cov} It "
+            f"that provision, citing the instrument.{more}{each} The record covers {cov} It "
             "does NOT establish that no other instrument was made under the provision: "
             "outside its coverage nothing was checked, so state the coverage rather "
             "than a total.]"
@@ -518,3 +527,231 @@ def made_under_note(raw_result) -> str:
             "Do not name any instrument as made under it from search results instead.]"
         )
     return ""
+
+
+# ---------------------------------------------------------------------------
+# P3.51: the record, for the sections a section search returned
+# ---------------------------------------------------------------------------
+#
+# `find_instruments_made_under` runs only when a question asks the made-under
+# question. Thomas's Q16 (6354, 13 October) did not: it asked what mechanisms
+# could lessen one local authority's duty to the homeless, the research relied
+# on s.33 of the Housing (Scotland) Act 1987, and the record's ssi/2022/356,
+# made under s.33A, went unnamed. Measured over the stored replays (Session 48,
+# `evidence/seam/s48/p351_measure.py`): 417 turns relied on a section whose
+# FAMILY in the record (the section and the lettered sections beside it, s.33
+# and s.33A) holds instruments, and 265 named none of them.
+#
+# So after each section search code hands the Worker the record's instruments
+# for the sections the search returned (user decision, Session 48): a family
+# with at most SECTION_FAMILY_LISTED instruments not revoked in whole is listed
+# by title, a larger one is counted with its earliest and latest, a family
+# whose every instrument is revoked in whole is left out. Measured: a median of
+# 3 lines a turn, p90 11. Each family once per Worker run. The block is an
+# ENABLING POWER block by name, so P2.3's rule already permits a made-under
+# claim from it and `strip_scope_blocks` removes it from what the lawyer reads.
+#
+# Its log entries (`source: made_under_sections`) reach the Manager's limb and
+# the lawyer's footer only for an instrument the Worker's report names
+# (`prune_section_family_entries`): a family nobody used must not add a clause
+# to every answer that section-searched an Act.
+
+SECTION_FAMILY_LISTED = 5
+SECTION_FAMILIES_PER_BLOCK = 6
+SECTION_FAMILY_SOURCE = "made_under_sections"
+SECTION_FAMILY_HEAD = "ENABLING POWER — the made-under record, for the sections this search returned"
+_RETURNED_SECTION = re.compile(
+    r"legislation\.gov\.uk/(?:id/)?([a-z]+/\d{4}/\d+)/section/(\d+)([A-Z]*)/?$")
+_FAMILY_PROVISION = re.compile(r"section/(\d+)([A-Z]*)")
+_GONE = ("revoked", "revoked_undated")
+
+
+def returned_section_families(raw_result) -> tuple:
+    """`(act_id, [base, ...])`: the Act a section search searched and the
+    section numbers it returned, letters dropped (s.33A -> "33"), in rank
+    order, each once. `("", [])` for anything else. Never raises."""
+    import json
+    try:
+        d = json.loads(raw_result) if isinstance(raw_result, str) else raw_result
+        rows = d.get("results") if isinstance(d, dict) else None
+        act, bases = "", []
+        for r in rows if isinstance(rows, list) else []:
+            url = str(r.get("url") or "") if isinstance(r, dict) else ""
+            m = _RETURNED_SECTION.search(url)
+            if not m or (act and m.group(1) != act):
+                continue
+            act = act or m.group(1)
+            if m.group(2) not in bases:
+                bases.append(m.group(2))
+        return (act, bases) if act else ("", [])
+    except Exception:
+        return ("", [])
+
+
+def handed_families(log) -> set:
+    """`{(act_id, base)}` this Worker run has already been handed."""
+    return {(e.get("act_id"), e.get("family")) for e in (log or [])
+            if e.get("tool") == "made_under" and e.get("source") == SECTION_FAMILY_SOURCE}
+
+
+def _rev_flag(value):
+    import json
+    if isinstance(value, dict):
+        return value
+    try:
+        f = json.loads(value) if value else None
+        return f if isinstance(f, dict) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _id_key(lid: str) -> tuple:
+    parts = str(lid).split("/")
+    try:
+        return (int(parts[-2]), int(parts[-1]))
+    except (ValueError, IndexError):
+        return (0, 0)
+
+
+def _plain(text, n: int = 160) -> str:
+    return _short(text, n).replace("[", "(").replace("]", ")")
+
+
+def _secs(secs: list) -> str:
+    return " and ".join(secs) if len(secs) <= 2 else ", ".join(secs[:-1]) + " and " + secs[-1]
+
+
+_MARK = {
+    "partly": " (recorded on legislation.gov.uk as revoked in part)",
+    "qualified": " (recorded on legislation.gov.uk with a qualified removal only)",
+    "revoked_later": " (recorded on legislation.gov.uk as revoked from a date still to come)",
+}
+
+
+def section_families_block(act_id: str, bases: list, rows: list, cov: dict,
+                           today=None) -> tuple:
+    """`(block, entries)` for the sections a section search returned.
+
+    `rows`: `(provision, legislation_id, title, act_title, revocation,
+    revocation_checked)`, every record row under a section of `act_id` whose
+    number is in `bases`. Families in `bases` order (the search's rank), at
+    most SECTION_FAMILIES_PER_BLOCK. `entries` go into the run's log: one
+    `made_under` entry per family spoken of (coverage, for the limb and the
+    footer, and the family, so the run is handed it once) and one stated
+    `enabling_power` entry per instrument named. Pure; `("", [])` where no
+    family has an instrument not revoked in whole.
+    """
+    from .revocation_record import category
+
+    fams: dict = {}
+    titles: dict = {}
+    for row in rows or []:
+        prov, lid, title, act_title = row[:4]
+        m = _FAMILY_PROVISION.fullmatch(str(prov or ""))
+        if not m or m.group(1) not in bases or not lid:
+            continue
+        e = fams.setdefault(m.group(1), {}).setdefault(lid, {"title": title or lid, "secs": []})
+        sec = f"s.{m.group(1)}{m.group(2)}"
+        if sec not in e["secs"]:
+            e["secs"].append(sec)
+        checked = row[5] if len(row) > 5 else None
+        flag = _rev_flag(row[4] if len(row) > 4 else None)
+        try:
+            e["cat"] = category(flag, today) if checked else "unchecked"
+        except Exception:
+            # One malformed flag reads as never checked; it must not cost the
+            # block every other instrument.
+            e["cat"] = "unchecked"
+        if act_title:
+            titles[act_title] = titles.get(act_title, 0) + 1
+    act = _plain(max(titles, key=titles.get) if titles else act_id, 120)
+    lines, entries, spoken, more = [], [], 0, 0
+    label = (cov or {}).get("label") or ""
+    for base in bases:
+        insts = fams.get(base)
+        if not insts:
+            continue
+        live = sorted((lid for lid, e in insts.items() if e["cat"] not in _GONE), key=_id_key)
+        if not live:
+            continue
+        if spoken >= SECTION_FAMILIES_PER_BLOCK:
+            more += 1
+            continue
+        spoken += 1
+        gone = len(insts) - len(live)
+        secs = sorted({s for e in insts.values() for s in e["secs"]}, key=lambda s: (len(s), s))
+        gone_note = (f" ({gone} more recorded on legislation.gov.uk as revoked in whole, "
+                     "not listed)") if gone else ""
+        if len(live) <= SECTION_FAMILY_LISTED:
+            named = live
+            parts = [f"made under {_secs(insts[lid]['secs'])}: {_plain(insts[lid]['title'])} "
+                     f"({lid}){_MARK.get(insts[lid]['cat'], '')}" for lid in live]
+            line = "; ".join(parts)
+            lines.append(line[0].upper() + line[1:] + gone_note + ".")
+        else:
+            named = [live[0], live[-1]]
+            lines.append(
+                f"Made under {_secs(secs)}: {len(live)} instruments not recorded as revoked in "
+                f"whole{gone_note}, the earliest {_plain(insts[live[0]]['title'])} ({live[0]}), "
+                f"the latest {_plain(insts[live[-1]]['title'])} ({live[-1]}); "
+                f"{MADE_UNDER_TOOL} lists them all.")
+        entries.append({"tool": "made_under", "source": SECTION_FAMILY_SOURCE, "status": "found",
+                        "act_id": act_id, "family": base, "act": act[:160],
+                        "provision": ", ".join(f"section/{s[2:]}" for s in secs)[:60],
+                        "count": len(insts), "listed": len(named), "coverage": label[:200],
+                        "named": [[lid, _short(insts[lid]["title"], 160)] for lid in named]})
+        entries.extend({"tool": "enabling_power", "legislation_id": lid[:60], "stated": True,
+                        "source": SECTION_FAMILY_SOURCE,
+                        "title": _short(insts[lid]["title"], 160)} for lid in named)
+    if not lines:
+        return "", []
+    tail = (f" {more} more of the returned sections have instruments in the record; "
+            f"{MADE_UNDER_TOOL} lists them.") if more else ""
+    stmt = _plain((cov or {}).get("statement") or "a stated class of instruments.", 1200)
+    block = (
+        f"\n\n[{SECTION_FAMILY_HEAD} of the {act} ({act_id}) and the lettered sections beside "
+        "them: instruments whose own preamble names the section given as a power they were "
+        "made under. " + " ".join(lines) + tail + " You MAY state that an instrument named "
+        "here was made under the section given for it, citing the instrument; where only a "
+        f"count is given, call {MADE_UNDER_TOOL} for that section before naming any other. "
+        f"The record covers {stmt} It does NOT establish that no other instrument was made "
+        "under these sections. A revocation is stated only as legislation.gov.uk records it; "
+        "where none is recorded, that says nothing about whether an instrument still applies, "
+        "so do not state its currency from this record.]"
+    )
+    return block, entries
+
+
+def _names_instrument(text: str, low: str, cited: set, lid: str, title: str) -> bool:
+    if not lid:
+        return False
+    if lid in cited or re.search(r"(?<![\w/])" + re.escape(lid) + r"(?![\w/])", text):
+        return True
+    t = re.sub(r"^the\s+", "", _WS.sub(" ", str(title or "")).strip().lower())
+    return len(t) > 20 and t in low
+
+
+def prune_section_family_entries(log: list, report: str) -> list:
+    """The run's log with this route's entries kept only for an instrument the
+    Worker's report names (by id, citation or title), and a family's entry only
+    where the report names one of its instruments. Every other entry is
+    untouched. Never raises: on a failure the log is returned as it was."""
+    try:
+        from .instrument_lookup import extract_instrument_citations
+
+        text = report or ""
+        low = _WS.sub(" ", text).lower()
+        cited = {f"{t}/{y}/{n}" for t, y, n in extract_instrument_citations(text, limit=999)}
+        out = []
+        for e in log or []:
+            if e.get("source") != SECTION_FAMILY_SOURCE:
+                out.append(e)
+            elif e.get("tool") == "enabling_power":
+                if _names_instrument(text, low, cited, e.get("legislation_id") or "", e.get("title")):
+                    out.append(e)
+            elif any(_names_instrument(text, low, cited, lid, title)
+                     for lid, title in e.get("named") or []):
+                out.append(e)
+        return out
+    except Exception:
+        return list(log or [])

@@ -436,16 +436,52 @@ def worker_messages(doc: dict, turn: dict, delegation: int = 1,
                         "content": content})
     return [
         {"role": "system", "content": system},
-        {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
+        {"role": "user", "content": worker_user_message(doc, turn, dg)},
         {"role": "assistant", "content": "", "tool_calls": calls},
         *results,
         {"role": "user", "content": closing},
     ]
 
 
+LAWYER_WORDS_PATH = "server_py/src/utils/lawyer_words.py"
+
+
+def lawyer_words_fn(rev: Optional[str] = None):
+    """`with_lawyer_words` as the code at `rev` has it (default: the working
+    tree), or None at a revision before P3.52 (c), whose Worker got the brief
+    alone."""
+    if not rev:
+        from src.utils.lawyer_words import with_lawyer_words
+        return with_lawyer_words
+    if not _file_at(rev, LAWYER_WORDS_PATH):
+        return None
+    return _module_at(rev, LAWYER_WORDS_PATH, "src.utils").with_lawyer_words
+
+
+def worker_user_message(doc: dict, turn: dict, dg: dict, rev: Optional[str] = None,
+                        lawyer_words: bool = True) -> str:
+    """The Worker's user message as `run_worker_agent` builds it (P3.52 (c)):
+    the recorded brief, then the turn's question through the product's own
+    `with_lawyer_words`. `replay.py` sends the turn's question verbatim as the
+    request's last user message, so it is what `_cache_key_query` held. P3.7's
+    lookup block is not part of it (`--first-round` rebuilds that).
+
+    `lawyer_words=False` is the before side of (c): the brief alone."""
+    brief = dg.get("brief") or ""
+    if not brief:
+        return turn.get("question") or ""
+    fn = lawyer_words_fn(rev) if lawyer_words else None
+    if fn is None:
+        return brief
+    cfg = _cfg_for(doc, turn)
+    return fn(brief, turn.get("question") or "", cfg.get("_research_mode"),
+              cfg.get("_chat_mode"))
+
+
 def worker_first_round_messages(doc: dict, turn: dict, delegation: int = 1,
                                 without_fix: bool = False,
-                                rev: str = PRE_P31_REV) -> list:
+                                rev: str = PRE_P31_REV,
+                                lawyer_words: bool = True) -> list:
     """The Worker's FIRST round (P4.6): its prompt and the brief, nothing else.
 
     **Why.** The composition seam above needs recorded tool results, and in
@@ -456,6 +492,9 @@ def worker_first_round_messages(doc: dict, turn: dict, delegation: int = 1,
     probe Session 22 asked for before any prompt change: does the edit move
     what the Worker decides to search? `run_first_round` offers the Worker its
     real tools and stops at the first call it makes.
+
+    The user message carries the lawyer's words after the brief, as the
+    product's does (P3.52 (c)); `lawyer_words=False` leaves them out.
     """
     dgs = (turn.get("audit") or {}).get("delegations", [])
     if not dgs:
@@ -467,7 +506,8 @@ def worker_first_round_messages(doc: dict, turn: dict, delegation: int = 1,
         system = _swap_worker_constant(system, cfg, rev)
     return [
         {"role": "system", "content": system},
-        {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
+        {"role": "user", "content": worker_user_message(doc, turn, dg,
+                                                        lawyer_words=lawyer_words)},
     ]
 
 
@@ -575,7 +615,9 @@ def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
     Faithful only where the recorded brief is what was sent. Since P3.7 code
     appends an instrument-lookup block to the brief that the audit does not
     record, so the command prints the payload's size the way `chat_loop`
-    counts it (`sent_chars`) beside the recorded probes'.
+    counts it (`sent_chars`) beside the recorded probes'. P3.52 (c)'s block,
+    the lawyer's latest message, is rebuilt (`worker_user_message`), as the
+    code at `at_rev` wrote it.
 
     `on_date` replaces the prompt's date line (see `as_sent_date`). The line
     is the same length on any date of the same month-name length.
@@ -603,7 +645,9 @@ def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
         system = system.replace(today, worker_date_line(on_date), 1)
     messages = [
         {"role": "system", "content": system},
-        {"role": "user", "content": dg.get("brief") or turn.get("question") or ""},
+        # P3.52 (c): the lawyer's words as the code at `at_rev` (or the working
+        # tree) appended them; the brief alone at a revision before (c).
+        {"role": "user", "content": worker_user_message(doc, turn, dg, rev=at_rev)},
     ]
     n = 0
     for rnd in rounds:
@@ -626,12 +670,33 @@ def sent_chars(messages: list) -> int:
     return sum(len(str(m.get("content", "") or "")) for m in messages)
 
 
+def rev_wraps_tool_results(rev: Optional[str]) -> bool:
+    """Did `chat_loop` at `rev` send a Google model its tool results wrapped
+    (P1.7)? The working tree (`rev` None) is read from the imported module."""
+    if not rev:
+        from src.agent import openrouter_client as oc
+
+        return hasattr(oc, "_wrap_tool_results")
+    return "def _wrap_tool_results" in _file_at(rev, "server_py/src/agent/openrouter_client.py")
+
+
+def as_sent_wrap(value: str, rev: Optional[str]) -> bool:
+    """`--wrap`: 'on', 'off', or 'auto' (the code at `rev` decides)."""
+    if value == "on":
+        return True
+    if value == "off":
+        return False
+    return rev_wraps_tool_results(rev)
+
+
 async def run_as_sent(messages: list, cfg: dict, tools: list,
-                      extra: Optional[dict] = None) -> dict:
+                      extra: Optional[dict] = None, wrap: bool = False) -> dict:
     """ONE streamed attempt of `messages`, with the product's payload shape
     (model, messages, stream, temperature, tools, tool_choice) plus `extra`
     (a lever under test: `reasoning`, `max_tokens`). No retry, so one draw is
-    one attempt and an (a) draw costs one attempt, not three.
+    one attempt and an (a) draw costs one attempt, not three. `wrap` sends the
+    tool results as `chat_loop` has since P1.7 (`_wrap_tool_results`); off,
+    as it sent them before.
 
     Returns what an `empty_completions` record would hold, and the attempt's
     seconds and cost, which no record holds.
@@ -643,9 +708,12 @@ async def run_as_sent(messages: list, cfg: dict, tools: list,
     from src.agent import openrouter_client as oc
 
     set_request_provider_config(cfg)
+    sent = oc._convert_messages_to_openai(messages)
+    if wrap:
+        sent = oc._wrap_tool_results(sent, cfg["model"])
     payload = {
         "model": cfg["model"],
-        "messages": oc._convert_messages_to_openai(messages),
+        "messages": sent,
         "stream": True,
         "temperature": cfg.get("temperature", 0),
     }
@@ -763,12 +831,15 @@ def _as_sent_command(args, doc: dict, turn: dict, sid: str) -> int:
     print(f"  code: {rev + ' (--at-rev)' if rev else 'the working tree'}; tools offered: "
           + ", ".join(t["function"]["name"] for t in tools))
     print(f"  lever: {json.dumps(extra) if extra else 'none (the pre-P4.10 payload)'}")
+    wrap = as_sent_wrap(getattr(args, "wrap", "auto"), rev)
+    print(f"  tool results: {'wrapped for a Google model (P1.7)' if wrap else 'as sent before P1.7'}"
+          f" (--wrap {getattr(args, 'wrap', 'auto')})")
     if args.dry_run:
         return 0
     cfg = asyncio.run(_provider_cfg(cfg0))
     total = 0.0
     for rep in range(1, args.reps + 1):
-        r = asyncio.run(run_as_sent(messages, cfg, tools, extra))
+        r = asyncio.run(run_as_sent(messages, cfg, tools, extra, wrap=wrap))
         total += r["cost"]
         print(f"  rep{rep}: {as_sent_outcome(r):<12} ${r['cost']:.4f} {r['seconds']:6.0f}s "
               f"completion_tokens={r['completion_tokens']} "
@@ -1124,7 +1195,8 @@ def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
     from src.agent.tools import get_worker_tools
 
     messages = worker_first_round_messages(doc, turn, args.delegation,
-                                           args.without_fix, args.rev)
+                                           args.without_fix, args.rev,
+                                           lawyer_words=not args.without_lawyer_words)
     cfg_turn = _cfg_for(doc, turn)
     rm = cfg_turn.get("_research_mode") or "legislation_only"
     tools = worker_tools_for(get_worker_tools, cfg_turn)
@@ -1149,7 +1221,8 @@ def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
     print(f"seam=worker FIRST ROUND  session={sid} turn={args.turn} "
           f"delegation={args.delegation}  research type={rm}  "
           f"{'WITHOUT fix (' + args.rev + ')' if args.without_fix else 'current code'}"
-          f"{'; WITHOUT the P3.7 lookup' if args.without_lookup else ''}")
+          f"{'; WITHOUT the P3.7 lookup' if args.without_lookup else ''}"
+          f"{'; WITHOUT the lawyer words (P3.52 c)' if args.without_lawyer_words else ''}")
     print(f"  prompt: {len(messages[0]['content']):,} chars; brief {len(messages[1]['content']):,} "
           f"chars; tools offered: {len(tools)}; recorded run made "
           f"{len(dg.get('tools') or [])} tool call(s)")
@@ -1172,7 +1245,8 @@ def _first_round_command(args, doc: dict, turn: dict, sid: str) -> int:
             d = Path(args.out)
             d.mkdir(parents=True, exist_ok=True)
             suffix = ("_nofix" if args.without_fix else "") + (
-                "_nolookup" if args.without_lookup else "")
+                "_nolookup" if args.without_lookup else "") + (
+                "_nolawyer" if args.without_lawyer_words else "")
             (d / f"{sid}_t{args.turn}_first{suffix}_rep{rep}.md").write_text(
                 content, encoding="utf-8")
         if args.print:
@@ -1287,6 +1361,9 @@ def main(argv: Optional[list] = None) -> int:
     p.add_argument("--without-lookup", action="store_true",
                    help="--first-round only (P3.7): leave out the instrument-lookup "
                         "block code appends to the brief, and the lookup tool")
+    p.add_argument("--without-lawyer-words", action="store_true",
+                   help="worker --first-round only (P3.52 (c)): the brief alone, "
+                        "without the lawyer's latest message code appends to it")
     p.add_argument("--as-sent", action="store_true",
                    help="worker seam only (P4.10): the Worker's model call rebuilt "
                         "as chat_loop sent it (recorded rounds, tools offered, no "
@@ -1318,6 +1395,12 @@ def main(argv: Optional[list] = None) -> int:
                         "upstream alone (e.g. google-vertex, google-ai-studio), with "
                         "no fallback; the product sends no routing field. Each draw "
                         "prints the provider that served it either way")
+    p.add_argument("--wrap", choices=["auto", "on", "off"], default="auto",
+                   help="--as-sent only (P1.7): send each tool result that is not "
+                        "wholly JSON as one JSON string field, as chat_loop does for a "
+                        "Google model since P1.7. 'auto' (default) follows the code at "
+                        "--at-rev (the working tree without it), so a stored payload "
+                        "from before P1.7 is redrawn as it was sent")
     p.add_argument("--hint", action="store_true",
                    help="manager seam only (P3.2 lever (c), prototype): prefix the "
                         "lawyer's turn with the verbatim text of the provisions it "

@@ -95,9 +95,14 @@ async def test_no_budget_leaves_behaviour_unchanged(_stub_pipeline):
 
 @pytest.mark.asyncio
 async def test_oversized_result_still_summarised_on_threshold_alone(_stub_pipeline):
+    # P3.50: `_run` fetches a judgment, whose threshold is its own cap
+    # (`CASE_LAW_WHOLE_CHARS`) when the model's is lower; past it, the
+    # threshold alone still triggers a summary.
+    from src.agent.summarisation import CASE_LAW_WHOLE_CHARS
+    size = max(_THRESHOLD, CASE_LAW_WHOLE_CHARS) + 1
     budget = {"used": 0, "limit": 1_000_000}
-    await _run("x" * (_THRESHOLD + 1), budget, _stub_pipeline)
-    assert _stub_pipeline["summarised"] == [_THRESHOLD + 1]
+    await _run("x" * size, budget, _stub_pipeline)
+    assert _stub_pipeline["summarised"] == [size]
 
 
 @pytest.mark.asyncio

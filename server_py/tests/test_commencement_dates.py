@@ -1051,3 +1051,159 @@ def test_no_new_static_sentence_trips_a_detector():
             assert not rr._currency_asserted(s), s
             assert rr.negcurrency_claim(s)[0] is None, s
             assert not rr._lk_classify(s), s
+
+
+# ---------------------------------------------------------------------------
+# P3.54: a date after today's date is not yet reached
+# ---------------------------------------------------------------------------
+
+BEFORE = "1901-10-01"   # a "today" before the fixtures' 1901-10-08
+
+
+def _later():
+    """`_dated()` read on a day before its dates: both relations still to come."""
+    return cd.apply_dates(_undated(), _ok([_effect(), _effect(changed="s. 2")]),
+                          {INST_A: "1901-09-01"}, today=BEFORE)
+
+
+def _part_later():
+    """Two instruments dated, one of them after today."""
+    rec = _with_repeal(_record([_group(), _group(inst=INST_B)]))
+    return cd.apply_dates(rec, _ok([_effect(), _effect(inst=INST_B, date="1901-12-01")]),
+                          {INST_A: "1901-09-01", INST_B: "1901-09-01"}, today="1901-11-01")
+
+
+def test_a_date_after_today_is_marked_still_to_come_and_counted():
+    out = _later()
+    assert out["related"][0]["changes"] == [
+        {"by": "reg. 2", "changed": ["s. 1", "s. 2"], "in_force": "1901-10-08",
+         "qualification": "wholly in force", "date_still_to_come": True}]
+    assert out["commencement_dates"]["still_to_come"] == 2
+    part = _part_later()
+    a, b = part["related"][0]["changes"], part["related"][1]["changes"]
+    assert "date_still_to_come" not in a[0] and b[0]["date_still_to_come"] is True
+    assert part["commencement_dates"]["still_to_come"] == 1
+
+
+def test_a_date_today_or_earlier_is_not_marked_and_the_shape_is_unchanged():
+    for today in ("1901-10-08", "1901-10-09", None):
+        out = cd.apply_dates(_undated(), _ok([_effect(), _effect(changed="s. 2")]),
+                             {INST_A: "1901-09-01"}, today=today)
+        assert out == _dated()
+        assert "still_to_come" not in out["commencement_dates"]
+
+
+def test_the_default_today_is_todays_date():
+    from datetime import date, timedelta
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    out = cd.apply_dates(_undated(), _ok([_effect(date=tomorrow), _effect(changed="s. 2")]),
+                         {INST_A: "1901-09-01"})
+    marked = [e for e in out["related"][0]["changes"] if e.get("date_still_to_come")]
+    assert [e["in_force"] for e in marked] == [tomorrow]
+
+
+def test_marking_never_touches_an_undated_failed_or_unmatched_record():
+    for rec in (_undated(), _not_retrieved(), _found_nothing()):
+        before = json.dumps(rec, sort_keys=True)
+        assert json.dumps(cd.mark_dates_to_come(rec, today="1800-01-01"),
+                          sort_keys=True) == before
+
+
+def test_the_worker_note_says_a_date_still_to_come_is_not_reached():
+    old, new = _note(_dated()), _note(_later())
+    added = ss._LATER_WORKER.format(n=2)
+    assert added in new
+    assert new.replace(added, "") == old
+    assert ("`date_still_to_come` is set on 2 of those dated relation(s): the date is after "
+            "today's date and has not been reached.") in new
+    assert "not that it has brought them into force" in new
+    assert ss._LATER_WORKER.format(n=1) in _note(_part_later())
+
+
+def test_the_recorders_carry_later_only_where_a_date_is_still_to_come():
+    for rec in (_dated(), _undated(), _not_retrieved(), _found_nothing()):
+        assert all("later" not in e for e in _logs(rec))
+    rel = [e for e in _logs(_later()) if e["tool"] == "change_record"][0]
+    cur = [e for e in _logs(_later()) if e["tool"] == "currency"][0]
+    assert rel["later"] == 2 and cur["later"] == 2
+
+
+def test_the_manager_texts_change_only_where_a_date_is_still_to_come():
+    limb_old, limb_new = ss._relations_limb(_logs(_dated())), ss._relations_limb(_logs(_later()))
+    assert limb_new == limb_old + ss._LATER_LIMB.format(ids=SUBJECT)
+    lines_old = ss._commencement_lines(_logs(_dated()))
+    lines_new = ss._commencement_lines(_logs(_later()))
+    assert ss._LATER_LINE in lines_new and lines_new.replace(ss._LATER_LINE, "") == lines_old
+    cut = _later()
+    cut["related"][0]["changes_not_listed"] = 3
+    assert ss._LATER_LINE in ss._commencement_lines(_logs(cut))
+    # one instrument consulted twice in a step, once with a date still to come
+    assert ss._LATER_LINE in ss._commencement_lines(_logs(_dated(), _later()))
+    foot_old = ss._relations_footer_clause(_logs(_dated()))
+    foot_new = ss._relations_footer_clause(_logs(_later()))
+    assert foot_new == foot_old.replace(
+        "It says when the provision was brought into force, not whether",
+        "It says when the provision was brought into force, or, for a date after today, "
+        "when it is due to come into force, not whether")
+    assert foot_new != foot_old
+    # the currency footer clause: unchanged
+    assert ss._currency_footer_clause(_logs(_later())) == ss._currency_footer_clause(
+        _logs(_dated()))
+
+
+def test_no_still_to_come_sentence_trips_a_detector():
+    rr = _detectors()
+    foot = ss._relations_footer_clause(_logs(_later()))
+    texts = [ss._LATER_WORKER.format(n=2), ss._LATER_LIMB.format(ids=SUBJECT),
+             ss._LATER_LINE, foot[foot.index(" It says when"):foot.index("; any other")]]
+    from src import prompts
+    texts += re.findall(r"Where the entry also carries `date_still_to_come`.*?"
+                        r"brought into force\.", prompts.WORKER_SYSTEM_PROMPT)
+    assert len(texts) == 6
+    for text in texts:
+        assert not rr.NEG_ASSERTED.search(text), text
+        assert not rr.NOT_FOUND.search(text), text
+        assert rr.derivation_claims(text)[0] == [], text
+        assert not rr.IN_FORCE_CLAIM.search(text), text
+        assert not rr._CUR_DISCLOSED.search(text), text
+        for rx in (rr.NEG_TERMS, rr.NEG_LIMITS, rr.NEG_BLAMED_INDEX, rr.NEG_BLAMED_USER,
+                   rr.HALT_LITERAL, rr.HALT_PARAPHRASE, rr.HALT_AS_TIMEOUT, rr.OPENER_VOCAB):
+            assert not rx.search(text), (rx.pattern[:40], text)
+        for s in rr._sentences(text):
+            assert not (rr._CMC_CONTEXT.search(s) and rr._CMC_DENIED.search(s)), s
+            assert not rr._currency_asserted(s), s
+            assert rr.negcurrency_claim(s)[0] is None, s
+    # and the whole note reads no worse than the note without it
+    old, new = _verdicts(rr, _note(_dated())), _verdicts(rr, _note(_later()))
+    for name, n in new["patterns"].items():
+        assert n <= old["patterns"][name], name
+    for k in old:
+        if k != "patterns":
+            assert new[k] <= old[k], k
+
+
+def test_the_still_to_come_blocks_still_strip_whole():
+    rr = _detectors()
+    assert ss.strip_scope_blocks("Answer." + _note(_later())) == ("Answer.", 1)
+    log = [{"tool": "search_legislation", "query": "q", "legislation_id": "",
+            "shown": 5, "matched": 141}] + _logs(_later())
+    block = ss.worker_scope_block(log, {})
+    assert ss._LATER_LINE in block and ss._LATER_LIMB.format(ids=SUBJECT) in block
+    assert ss.strip_scope_blocks("Report." + block) == ("Report.", 1)
+    footer = ss.answer_scope_footer(log, {})
+    assert "when it is due to come into force" in footer
+    assert rr._without_footer("Answer." + footer) == "Answer."
+
+
+def test_both_prompt_permissions_say_a_date_still_to_come_is_not_reached():
+    from src import prompts
+    rel = ("Where the entry also carries `date_still_to_come`, that date is after today's "
+           "date: say the provision is due to come into force on it, never that it has been "
+           "brought into force.")
+    inf = ("Where the entry also carries `date_still_to_come`, the date is after today's "
+           "date: say the provision is due to come into force on it, never that it has been "
+           "brought into force.")
+    for p in (prompts.WORKER_SYSTEM_PROMPT, prompts.WORKER_SYSTEM_PROMPT_HYBRID,
+              prompts.WORKER_SYSTEM_PROMPT_CONVERSATIONAL):
+        assert rel in p, p[:80]
+        assert inf in p, p[:80]

@@ -1365,6 +1365,14 @@ def _published_changed_notes() -> list:
     limb = _lookup_limb([{"tool": LOOKUP_ENTRY, "legislation_id": "ssi/1901/3",
                           "label": "SSI 1901/3", "status": "held_without_text"}])
     pairs.append((limb, limb.replace("available in this index, never", "available here, never")))
+    # P3.38 finding 2 (Session 50): the empty section search's note once code's
+    # lookup says the index lacks the instrument or its text, against the note
+    # it replaces.
+    from src.utils.search_scope import empty_section_note, section_search_note
+    for args in ({"legislation_id": "ssi/1901/3", "query": "£"}, {"legislation_id": "ssi/1901/3"}):
+        old = section_search_note(args, {"results": [], "returned": 0})
+        for status in ("not_held", "held_without_text"):
+            pairs.append((empty_section_note(args, status, "SSI 1901/3"), old))
     assert all(a and b and a != b for a, b in pairs), pairs
     return pairs
 

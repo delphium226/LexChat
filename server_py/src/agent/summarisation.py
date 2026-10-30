@@ -28,6 +28,21 @@ SUMMARISE_CHUNK_FALLBACK_CHARS = 5_000
 # the tail of a long research run is compressed.
 WORKER_CONTEXT_BUDGET_CHARS = 250_000
 
+# P3.50: a judgment is handed to the Worker whole up to this size, whatever the
+# model's threshold (`provider_factory.get_tool_result_threshold`); the context
+# budget above still applies. A case summary has to read the court's own words,
+# and a query-shaped summary drops exactly the passage that makes a point the
+# case's central one: over the 21 stored turns that fetched Rex v Evans [2025]
+# EWCA Crim 1150 (28,746 chars), the raw text carried [43] ("our focus was
+# necessarily on the admitted duties and responsibilities of the appellant on
+# the night in question") 21 times and the summary handed over 0 (Session 48,
+# `evidence/seam/s48/p350_phrases.py`), and no report or answer ever carried a
+# passage its summary had dropped. 60,000 is the first cap (user decision,
+# Session 48): 84 of the 228 judgments in the stored replays fit it (median
+# 73,229 chars); a larger one is summarised as before.
+CASE_LAW_WHOLE_CHARS = 60_000
+WHOLE_TEXT_TOOLS = frozenset({"get_case_law_text"})
+
 
 async def call_chunk(on_chunk: Callable, data: dict) -> None:
     """Call on_chunk callback, handling both sync and async callables."""
@@ -73,7 +88,8 @@ SUMMARY_GLOSS_RULE = (
 
 def check_summary_citations(summary: str, source, query: str = "") -> str:
     """P3.45: the summary with every case citation its source does not hold
-    removed (`utils.summary_citations.strip_unsourced_citations`, which says
+    removed, and (P3.47) every case named without a citation that the source
+    does not name (`utils.summary_citations.strip_unsourced_citations`, which says
     what goes and why). Run on every summary the Worker is handed: a fresh
     one here, and a local-cache hit in `run_worker_tool`, so a row stored
     before this check is checked when it is served. Fail-soft: the summary
@@ -86,8 +102,10 @@ def check_summary_citations(summary: str, source, query: str = "") -> str:
         return summary
     if removed:
         actions = ", ".join(sorted({r["action"] for r in removed}))
-        logger.info(f"[SummaryCheck] removed {len(removed)} case citation(s) the summarised "
-                    f"text does not hold ({actions}; {len(summary) - len(checked)} chars)")
+        names = sum(1 for r in removed if r.get("kind") == "name")
+        logger.info(f"[SummaryCheck] removed {len(removed) - names} case citation(s) and {names} "
+                    f"case name(s) the summarised text does not hold ({actions}; "
+                    f"{len(summary) - len(checked)} chars)")
         logger.debug(f"[SummaryCheck] removed: {[r['citation'] for r in removed]}")
     return checked
 

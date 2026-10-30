@@ -18,7 +18,8 @@ consulted, computed from the record:
 and, for an instrument whose record was not consulted, neither. Plus one
 sentence beside `_IN_FORCE_RULE` (`_COMMENCEMENT_RECORD_RULE`).
 
-Synthetic instruments only ("Widget" Acts of 1901).
+Synthetic instruments only ("Widget" Acts; their ids moved from 1901 to 2001 at
+P3.49, which gives an empty record of a pre-1963 instrument its own wording).
 """
 
 import sys
@@ -37,8 +38,8 @@ from src.utils.search_scope import (
     worker_scope_block,
 )
 
-_ACT = "asp/1901/1"
-_ORDER = "ssi/1901/3"
+_ACT = "asp/2001/1"
+_ORDER = "ssi/2001/3"
 
 
 def _row(changed_prov, affecting, effect, changed=_ACT, affecting_prov="reg. 2"):
@@ -91,7 +92,7 @@ def test_the_recorder_counts_commencements_by_another_instrument_apart_from_self
                  ("s. 3", _ACT, "coming into force"),
                  ("s. 4", _ACT, "coming into force"),
                  ("s. 5", _ACT, "coming into force"),
-                 ("s. 6", "asp/1901/9", "words substituted"))
+                 ("s. 6", "asp/2001/9", "words substituted"))
     e = _currency_entry(_log((_ACT, rows, "to")))
     assert e["commenced"] == 5                  # P2.5's count, unchanged
     assert e["commenced_by_other"] == 2
@@ -180,8 +181,8 @@ def test_only_self_referential_relations_permit_neither():
 
 @pytest.mark.parametrize("rows", [
     [],                                                              # an empty record
-    _rows(("s. 2", "asp/1901/9", "words substituted")),              # amendments only
-    _rows(("specified amended provision(s)", "ssi/1901/5", "Commencement Order")),
+    _rows(("s. 2", "asp/2001/9", "words substituted")),              # amendments only
+    _rows(("specified amended provision(s)", "ssi/2001/5", "Commencement Order")),
 ], ids=["empty record", "amendments only", "commencement orders of amendments only"])
 def test_a_record_with_no_commencement_relation_permits_neither(rows):
     limb = _currency_limb(_log((_ACT, rows, "to")))
@@ -239,15 +240,15 @@ def test_one_line_per_instrument_and_the_best_call_wins():
     none."""
     full = _rows(("s. 1", _ORDER, "coming into force"))
     limb = _currency_limb(_log((_ACT, full, "to"), (_ACT, [], "to"),
-                               ("asp/1901/2", [], "to")))
+                               ("asp/2001/2", [], "to")))
     assert limb.count(f"- {_ACT}:") == 1
     assert f"{_ACT}: 1 commencement relation(s) made by another instrument" in limb
-    assert "- asp/1901/2: the record lists neither" in limb
+    assert "- asp/2001/2: the record lists neither" in limb
 
 
 def test_instruments_beyond_the_cap_share_one_line_that_permits_neither():
     from src.utils.search_scope import _MAX_COMMENCEMENT_LINES
-    lids = [f"asp/1901/{100 + i}" for i in range(_MAX_COMMENCEMENT_LINES + 2)]
+    lids = [f"asp/2001/{100 + i}" for i in range(_MAX_COMMENCEMENT_LINES + 2)]
     limb = _currency_limb(_log(*[(lid, [], "to") for lid in lids]))
     assert limb.count(": the record lists neither") == _MAX_COMMENCEMENT_LINES
     assert f"- {lids[-2]}, {lids[-1]}: records consulted but not described here" in limb
@@ -400,7 +401,7 @@ def test_the_worker_block_under_by_speaks_of_other_legislation():
 def test_the_worker_block_keeps_the_honest_failure_branch():
     """Invariant 1: a record with no `coming into force` relation still says
     the commencement is not recorded here, never that it was not made."""
-    for rows in ([], _rows(("s. 2", "asp/1901/9", "words substituted"))):
+    for rows in ([], _rows(("s. 2", "asp/2001/9", "words substituted"))):
         note = _worker_note(rows)
         if rows:
             assert "NO relation here is a `coming into force` relation for this " \

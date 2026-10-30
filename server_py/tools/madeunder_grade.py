@@ -54,6 +54,9 @@ ssi/2020/351 ssi/2021/73 ssi/2021/122 ssi/2021/174 ssi/2022/54 ssi/2023/302 ssi/
 assert len(S95_REVOKED_PART) == 8 and not S95_REVOKED_PART & S95_REVOKED_WHOLE
 
 MADE_UNDER_TURNS = {"6383": (1, 2, 3, 4), "6382": (1,), "6340": (1,)}
+# P3.48's acceptance: the conversational 6383 turns whose short lists left partial
+# revocations unmarked (`wave4_p333b`).
+P348_TURNS = (1, 3)
 TOOL = "find_instruments_made_under"
 _ID = re.compile(r"\b((?:ssi|uksi)/\d{4}/\d+)\b")
 # "S.S.I. 2024/311", "SSI 2024/311": a named instrument without a link.
@@ -121,6 +124,8 @@ def revocation_grade(body: str, named: set) -> dict:
         # a wholly revoked instrument the answer names without saying so
         "whole_missed": sorted((named & S95_REVOKED_WHOLE) - said),
         "part_missed": sorted((named & S95_REVOKED_PART) - said),
+        # P3.48: the partly revoked instruments the answer names at all
+        "part_named": sorted(named & S95_REVOKED_PART),
         "in_force": c["in_force"],
     }
 
@@ -133,14 +138,15 @@ def tools_called(turn: dict) -> list:
 def grade(path: Path) -> dict:
     run = json.loads(path.read_text(encoding="utf-8"))
     sid = str(run.get("session_id"))
+    base = sid.split("_")[-1]          # a prefixed re-run id ("p37r_6383") grades as its session
     out = []
     for t in run.get("turns", []):
-        if t.get("turn") not in MADE_UNDER_TURNS.get(sid, ()):
+        if t.get("turn") not in MADE_UNDER_TURNS.get(base, ()):
             continue
         body = _without_footer(t.get("answer") or "")
         ids = named_ids(body)
         claims = derivation_claims(body)[0]
-        if sid == "6340":
+        if base == "6340":
             # The failure is an instrument said to be made under s.117 of the
             # 1962 Act; a claim about another Act's power is not this one.
             unverified = [c for c in claims if re.search(r"\b117\b", c)]
@@ -151,7 +157,7 @@ def grade(path: Path) -> dict:
             "turn": t.get("turn"), "tool": TOOL in tools_called(t),
             "found": len(ids & S95), "other": sorted(i for i in ids - S95 if i.startswith("ssi/")),
             "unverified": unverified, "chars": len(body), "error": t.get("error"),
-            "revocation": revocation_grade(body, ids) if sid != "6340" else None,
+            "revocation": revocation_grade(body, ids) if base != "6340" else None,
         })
     return {"file": path.name, "session": sid, "cost": run.get("total_cost_usd"),
             "model_mismatch": run.get("model_mismatch"), "turns": out}
@@ -179,6 +185,13 @@ def main(argv=None) -> int:
                       f"in-force sentences {len(rv['in_force'])}")
                 for s in rv["in_force"][:3]:
                     print(f"        ? {s[:200]}")
+                if g["session"].split("_")[-1] == "6383" and t["turn"] in P348_TURNS:
+                    named, missed = rv["part_named"], rv["part_missed"]
+                    ok = not (missed or rv["whole_wrong"] or rv["part_wrong"] or rv["in_force"])
+                    print(f"        P3.48: marks {len(named) - len(missed)} of {len(named)} partly "
+                          f"revoked instruments it names; wrong {rv['whole_wrong'] + rv['part_wrong']}; "
+                          f"in-force sentences {len(rv['in_force'])} -> {'MET' if ok else 'NOT MET'}"
+                          + (f"  unmarked {missed}" if missed else ""))
     print(f"total ${total:.2f}")
     return 0
 

@@ -169,7 +169,7 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 - These four relations ARE retrievable, and only by `get_legislation_changes`. A keyword search cannot establish any of them: an instrument ranking highly in a search for an Act's title has not thereby been shown to commence or amend it.
 - So if the question asks whether something is in force, whether commencement regulations have been made, what commenced or amended a provision, or what an instrument amends or revokes, you MUST call `get_legislation_changes` before answering. Do not answer any of those from search results, from section text, or from memory.
 - NEVER write that no commencement regulations have been made, or that nothing has amended or repealed a provision, unless you have called `get_legislation_changes` for that legislation and it came back empty — and then say that no such change is recorded, not that none was made.
-- The change record's relations give no DATES of their own. Where code has added an `in_force` date to a commencement made by another instrument (from legislation.gov.uk's Changes to Legislation record; the note on the result says so), you may state it, with its qualification, as the date that instrument brought the provision into force. Otherwise the record establishes that an instrument commenced a provision, never when it came into force; for a date, retrieve the commencing instrument itself.
+- The change record's relations give no DATES of their own. Where code has added an `in_force` date to a commencement made by another instrument (from legislation.gov.uk's Changes to Legislation record; the note on the result says so), you may state it, with its qualification, as the date that instrument brought the provision into force. Where the entry also carries `date_still_to_come`, that date is after today's date: say the provision is due to come into force on it, never that it has been brought into force. Otherwise the record establishes that an instrument commenced a provision, never when it came into force; for a date, retrieve the commencing instrument itself.
 - The change record says nothing about ENABLING POWER either. The rule above still governs what an instrument was made under."""
 
 # P2.5 (B4) — what the Status line is PERMITTED to say, rather than whether it
@@ -231,7 +231,7 @@ _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
 - NEVER write a blanket currency claim about an instrument or a body of legislation. The prohibition is on the PROPOSITION, not on a form of words: "the Act is in force", "all cited legislation is currently in force", "it is in operation", "it remains in force", "it is still good law", "it is current law", "its active status", "it continues to apply" are all the same claim and all forbidden. You cannot establish it, for any instrument, from anything you can retrieve.
 - NEVER infer currency from CASE LAW. A judgment citing, applying or discussing an Act is not evidence that the Act, or any provision of it, is in force today: courts apply the law as it stood at the material time, and a 2026 judgment on a 1998 Act says nothing about which of its provisions are commenced or repealed now. Do not write that a case "confirms" an Act's status.
 - What you MAY state, citing the source:
-  (a) a `coming into force` relation from `get_legislation_changes` — that named provision was commenced by that named instrument. The relation carries no date of its own; where code added an `in_force` date to it, give that date with its qualification as the date the instrument brought the provision into force, never as its status today; otherwise, for a date, retrieve the commencing instrument and quote it.
+  (a) a `coming into force` relation from `get_legislation_changes` — that named provision was commenced by that named instrument. The relation carries no date of its own; where code added an `in_force` date to it, give that date with its qualification as the date the instrument brought the provision into force, never as its status today; otherwise, for a date, retrieve the commencing instrument and quote it. Where the entry also carries `date_still_to_come`, the date is after today's date: say the provision is due to come into force on it, never that it has been brought into force.
   (b) a repeal or revocation relation from `get_legislation_changes` — that named provision is no longer in force.
   (c) a repeal or revocation marker in the index's own title, e.g. "Companies Act 1967 (repealed)" — treat that instrument as repealed.
   (d) the `valid_date` on a `get_legislation_text` response — the date the held text is stated to be up to date to. Say it as that, never as a date the legislation came into force.
@@ -475,7 +475,7 @@ CRITICAL RULES:
 - DO NOT answer legal questions using your own internal knowledge. You must use `delegate_research` for any legal question. What the retrieved text says, state plainly with its citation. What it does not settle is interpretation: give it as a reading ("on one reading ..."), with the text each reading rests on, never as the law. Do not say that a general rule (an interpretation Act, a common-law doctrine) applies to an instrument or in a jurisdiction unless the research retrieved the provision or source that applies it there.
 - CLARIFICATION WITHOUT SPECULATION: When asking a clarifying question, never draw on internal training data to suggest, list, or describe specific cases, legislation, or references. Ask neutrally — e.g. "Which specific reference or case do you mean? Could you give the court, year, or short name?" — without stating or implying what you think might exist. Your training data is out of date; only the research tools return current information.
 - CITATION PRESERVATION: Do not alter, shorten, or remove URLs or citations provided by the Worker Agent. When you shorten the Worker's findings, keep each provision it cites (the section, subsection or paragraph, with its link): never reduce a provision to the instrument's name alone.
-- NOT HELD IS NOT A WRONG CITATION: if the research could not find an instrument or case the user cited, say that this index does not hold it. Never ask the user to check, verify or confirm the citation on that ground, and never suggest they meant a different year or number: the indexes are incomplete, recent instruments least of all, so a correct citation is often not held.
+- NOT HELD IS NOT A WRONG CITATION: if the research could not find an instrument the user cited, say that this index does not hold it. If it could not find a case the user cited, say that it was not among the judgments the search returned, never that the database or index does not hold it: a search can miss a judgment the database holds. Never ask the user to check, verify or confirm the citation on that ground, and never suggest they meant a different year or number: the indexes are incomplete, recent instruments least of all, so a correct citation is often not held.
 
 YOUR APPROACH:
 1. Ask clarifying questions readily. If a question is ambiguous or broad, ask what the user specifically needs before delegating. Do not assume and over-research. When the user disputes an answer, check the text again before you reply; change your position only on text that decides the point, and say which, and do not open by agreeing.
@@ -611,6 +611,18 @@ def _quick_lookup_route(rule: str) -> str:
 # case-law query is not narrowed by an added "Scotland". This Worker is never
 # told the filters (P3.14), so it takes the jurisdiction from the brief, which
 # the conversational Manager is now told to state.
+# P3.52 (Thomas, 13 October, Q17 / 6345): the legislation searches rank by
+# meaning. Probed live (Session 47, `evidence/seam/s47/p352_probe.jsonl`): on
+# the Transport (Scotland) Act 2001 the question's own words put s.38 (grants
+# to bus service operators, the fare-cap power) at rank 3 and a plain sentence
+# at rank 2, while the Worker's own form, `"maximum fare" OR "fare cap"`,
+# left it out of the top 20; the Act-level search on the question's words
+# returned the 2001 Act, the Worker's quoted query did not. Its first query
+# was a quoted OR list in 6 of 6 seam draws. The worked example is
+# deliberately not about buses.
+_LEGISLATION_QUERY_WORDING = """QUERY WORDING (legislation searches): `search_legislation` and `search_legislation_sections` rank results by meaning, not by matching words. Unless you are searching for an Act by its exact title, write the query as a plain sentence saying what the provision would do, in the question's own words (for example "duty of an education authority to provide free school transport"), not as quoted phrases joined by OR or AND, which rank the provision you need lower. Where the question asks what enables a measure the legislation may not name in those words (a cap, a subsidy, a charge), the power may be a general one through which the measure is funded or required, such as a power to make grants on conditions: word the query to cover that too, and say which kind of power each provision you cite is."""
+
+
 WORKER_SYSTEM_PROMPT_CONVERSATIONAL ="""You are a Legal Research Support Agent operating in quick-lookup mode.
 
 YOUR MANDATE:
@@ -625,6 +637,8 @@ Issue one targeted search using the appropriate search tool.
 - Legislation: call `search_legislation` once. Use the exact Act title if known.
 - Case law: call `search_case_law` once with focused keywords.
 - Stop when you have 2–3 relevant results. Do not batch multiple searches unless the brief explicitly names multiple distinct Acts or cases.
+
+""" + _LEGISLATION_QUERY_WORDING + """
 
 PHASE 2 — RETRIEVE:
 For each result from Phase 1, call the appropriate retrieval tool once.

@@ -889,3 +889,18 @@ def test_the_chat_worker_gets_the_rule_as_a_clause_not_a_block():
     assert "never ask the user to check or verify it" in output
     # Still exactly the four bullets it had: no format change beyond one clause.
     assert len([ln for ln in output.splitlines() if ln.startswith("- ")]) == 4
+
+
+def test_the_chat_manager_says_a_case_was_not_returned_not_not_held():
+    """P3.55: on 6359 t6 the Worker followed P3.46's note ("was not among the
+    judgments returned") but the conversational Manager wrote "the database
+    does not hold" Clark, 3 of 3, from this rule's one wording for both kinds
+    of authority. For legislation `lookup_legislation` is an exact test; for
+    case law nothing is, so the case limb says what the search showed. Seam
+    draw (`evidence/seam/s51/p355`): 'does not hold' 3 of 9 -> 0 of 9."""
+    from src import prompts
+    text = prompts.MANAGER_SYSTEM_PROMPT_CONVERSATIONAL
+    rule = text.split("NOT HELD IS NOT A WRONG CITATION:")[1].split("\n")[0]
+    assert "could not find an instrument the user cited, say that this index does not hold it" in rule
+    assert "not among the judgments the search returned" in rule
+    assert "never that the database or index does not hold it" in rule

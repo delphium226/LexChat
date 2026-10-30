@@ -622,3 +622,188 @@ def test_a_local_cache_hit_is_checked_too(_worker_config):
         out = _run_tool(raw, cache_on=True)
     assert out.startswith("Cached: Other Ltd v Thing Ltd [1901] UKSC 7.")
     assert "[1901] AC 25" not in out
+
+
+# ---------------------------------------------------------------------------
+# 8. P3.47: a case named without a citation (Session 49)
+# ---------------------------------------------------------------------------
+#
+# Measured over every stored summary: 37 names their source does not name, 12
+# the summariser's additions, 5 "does not contain" notes, 20 names the brief
+# itself carries. User decisions: the notes go, a name the question names
+# stays, a passage carrying a citation the source holds stays.
+
+def _names(records):
+    return [(r["name"], r["action"]) for r in records if r.get("kind") == "name"]
+
+
+def test_a_bare_name_the_source_never_names_takes_its_item():
+    summary = ("*   **The contract test:** a sham term is set aside (*Gadgetry Ltd v Smallbody*).\n"
+               "*   Section 5 defines a widget.")
+    out, recs = _strip(summary, SOURCE)
+    assert out == "*   Section 5 defines a widget."
+    assert _names(recs) == [("Gadgetry Ltd v Smallbody", "item")]
+
+
+def test_a_bare_name_in_prose_takes_its_sentence():
+    summary = "Section 5 defines a widget. The courts follow Gadgetry Ltd v Smallbody here. Section 6 sets fees."
+    out, recs = _strip(summary, SOURCE)
+    assert out == "Section 5 defines a widget. Section 6 sets fees."
+    assert _names(recs) == [("Gadgetry Ltd v Smallbody", "sentence")]
+
+
+def test_a_note_that_the_text_does_not_contain_a_named_case_goes():
+    summary = HELD + "\n\n*Note: The text does not include case law (such as the Gadgetry v Smallbody criteria).*"
+    out, recs = _strip(summary, SOURCE)
+    assert out.rstrip() == HELD and _names(recs) == [("Gadgetry v Smallbody", "sentence")]
+
+
+def test_a_citation_on_the_next_line_does_not_close_a_name():
+    summary = "Section 5 defines a widget. The courts follow Gadgetry Ltd v Smallbody here.\n" + INVENTED
+    assert [n.key for n in sc.bare_names(summary)] == ["Gadgetry Ltd v Smallbody"]
+
+
+@pytest.mark.parametrize("raw", [
+    _raw("Gadgetry Ltd v Smallbody"),
+    # one party the source names is enough (a judgment names a case by one side)
+    _raw("as Smallbody shows"),
+])
+def test_a_bare_name_the_source_names_stays(raw):
+    summary = "Section 5 defines a widget. The courts follow Gadgetry Ltd v Smallbody here."
+    assert _strip(summary, raw) == (summary, [])
+
+
+def test_a_name_the_research_question_names_stays():
+    summary = "The requested judgment, Gadgetry Ltd v Smallbody, was not located in these results."
+    assert _strip(summary, SOURCE, "Summarise Gadgetry Ltd v Smallbody") == (summary, [])
+    assert _strip(summary, SOURCE)[0] == ""
+
+
+def test_a_name_with_a_citation_after_it_is_p345s_alone():
+    out, recs = _strip(INVENTED, SOURCE)
+    assert out == "" and len(recs) == 1 and "kind" not in recs[0]
+
+
+def test_a_bracketed_year_alone_does_not_make_a_citation():
+    summary = HELD + " Occupiers follow the **Gadgetry v Smallbody [1966]** standard."
+    out, recs = _strip(summary, SOURCE)
+    assert out == HELD and _names(recs) == [("Gadgetry v Smallbody", "sentence")]
+
+
+def test_a_placeholder_party_is_not_a_case():
+    summary = 'In the UK, "Rex v [Name]" and "[Name] v R" are both used for the Crown.'
+    assert sc.bare_names(summary) == []
+    assert _strip(summary, SOURCE) == (summary, [])
+
+
+def test_a_label_before_the_name_is_not_a_party():
+    summary = "*   **Case Title:** Gadgetry Ltd v R\n*   **Court:** Court of Appeal"
+    assert [n.key for n in sc.bare_names(summary)] == ["Gadgetry Ltd v R"]
+    assert _strip(summary, _raw("Gadgetry Ltd v R")) == (summary, [])
+
+
+def test_closing_emphasis_and_a_stop_end_the_second_party():
+    summary = ("Requested: *Gadgetry v Smallbody* and *Other Ltd v Thing Ltd*. "
+               "Widget Co v Example Ltd. Then more.")
+    assert [n.key for n in sc.bare_names(summary)] == [
+        "Gadgetry v Smallbody", "Other Ltd v Thing Ltd", "Widget Co v Example Ltd"]
+
+
+@pytest.mark.parametrize("summary", [
+    "Gadgetry v Smallbody held that widgets count.",          # a lower-case word
+    "Gadgetry v Smallbody and the court agreed.",             # trailing joining words dropped
+    "Gadgetry v Smallbody. Then the court agreed.",           # a stop after a word
+])
+def test_the_second_party_ends_where_the_name_does(summary):
+    assert [n.key for n in sc.bare_names(summary)] == ["Gadgetry v Smallbody"]
+
+
+def test_the_second_party_is_at_most_eight_words():
+    summary = "Gadgetry v One Two Three Four Five Six Seven Eight Nine"
+    assert [n.key for n in sc.bare_names(summary)] == [
+        "Gadgetry v One Two Three Four Five Six Seven Eight"]
+
+
+def test_a_v_with_no_first_party_is_not_a_name():
+    assert sc.bare_names("costs follow the event v Smallbody here.") == []
+
+
+def test_a_heading_that_is_the_case_takes_its_block():
+    summary = ("### Gadgetry v Smallbody\nThe control test.\n\n### Section 5\n" + HELD)
+    out, recs = _strip(summary, SOURCE)
+    assert out.strip() == "### Section 5\n" + HELD and _names(recs) == [("Gadgetry v Smallbody", "block")]
+    raw = json.dumps({"results": [{"title": "Holland Ltd v Oxbridge", "ncn": "[2016] EWHC 25 (Ch)"}]})
+    kept = summary.replace("The control test.", "Applied in Holland Ltd v Oxbridge [2016] EWHC 25 (Ch).")
+    assert _strip(kept, raw) == (kept, [])
+
+
+@pytest.mark.parametrize("summary", [
+    "*   **Holland Ltd v Oxbridge [2016] EWHC 25 (Ch):** applies the test in *Gadgetry v Smallbody*.",
+    "The results (e.g. [2016] EWHC 25 (Ch)) do not contain the test in Gadgetry v Smallbody.",
+])
+def test_a_passage_carrying_a_citation_the_source_holds_stays(summary):
+    raw = json.dumps({"results": [{"title": "Holland Ltd v Oxbridge", "ncn": "[2016] EWHC 25 (Ch)"}]})
+    assert _strip(summary, raw) == (summary, [])
+
+
+def test_a_held_citation_in_another_sentence_of_the_line_does_not_keep_the_name():
+    raw = json.dumps({"results": [{"title": "Holland Ltd v Oxbridge", "ncn": "[2016] EWHC 25 (Ch)"}]})
+    summary = "Holland Ltd v Oxbridge [2016] EWHC 25 (Ch) is on notices. The test is from Gadgetry v Smallbody."
+    out, recs = _strip(summary, raw)
+    assert out == "Holland Ltd v Oxbridge [2016] EWHC 25 (Ch) is on notices."
+    assert _names(recs) == [("Gadgetry v Smallbody", "sentence")]
+
+
+def test_a_name_named_twice_in_a_list_never_cuts_the_held_case_between():
+    raw = json.dumps({"results": [{"title": "Other Ltd v Thing Ltd", "ncn": "[1901] UKSC 7"}]})
+    summary = "Authorities: Gadgetry v Smallbody, Other Ltd v Thing Ltd [1901] UKSC 7, Gadgetry v Smallbody."
+    assert _strip(summary, raw) == (summary, [])
+
+
+def test_a_held_citation_elsewhere_does_not_keep_a_name_passage():
+    raw = json.dumps({"results": [{"title": "Holland Ltd v Oxbridge", "ncn": "[2016] EWHC 25 (Ch)"}]})
+    summary = ("*   **Holland Ltd v Oxbridge [2016] EWHC 25 (Ch):** on notices.\n"
+               "*   The control test comes from *Gadgetry v Smallbody*.")
+    out, recs = _strip(summary, raw)
+    assert out == "*   **Holland Ltd v Oxbridge [2016] EWHC 25 (Ch):** on notices."
+    assert _names(recs) == [("Gadgetry v Smallbody", "item")]
+
+
+def test_a_name_with_no_distinctive_word_is_never_judged():
+    summary = "Section 5 defines a widget. See R v Secretary of State on this."
+    assert _strip(summary, SOURCE) == (summary, [])
+
+
+def test_the_name_check_is_idempotent():
+    summary = ("Section 5 defines a widget. The courts follow Gadgetry Ltd v Smallbody here.\n"
+               "*   Item (*Other Ltd v Thing Ltd*).\n*   Section 6 sets fees.")
+    once, _ = _strip(summary, SOURCE)
+    assert once != summary and _strip(once, SOURCE) == (once, [])
+
+
+@pytest.mark.parametrize("summary,after", [
+    # the closing bracket the line opened before the removed sentence stays
+    ("*(Note: Section 5 applies. Gadgetry v Smallbody [1901] AC 25 is the leading case.)*",
+     "*(Note: Section 5 applies.)*"),
+    # a bracket the removed sentence opened goes with it
+    ("Section 5 applies. The leading case is Gadgetry v Smallbody [1901] AC 25 (see s.5)",
+     "Section 5 applies."),
+])
+def test_the_sentence_cut_keeps_only_a_bracket_the_line_opened(summary, after):
+    assert _strip(summary, SOURCE)[0] == after
+
+
+def test_the_wrapper_counts_names_apart(caplog):
+    import logging
+    with caplog.at_level(logging.INFO, logger="agent"):
+        out = summ.check_summary_citations(
+            HELD + " The courts follow Gadgetry Ltd v Smallbody here.\n" + INVENTED, SOURCE, "q")
+    assert out == HELD
+    assert "removed 1 case citation(s) and 1 case name(s)" in caplog.text
+
+
+def test_a_fresh_summary_loses_an_invented_bare_name():
+    out, degraded = asyncio.run(summ.summarise_for_query(
+        SOURCE, "widget", "m",
+        chunk_fn=_chunk_returning(HELD + " The courts follow Gadgetry Ltd v Smallbody here.")))
+    assert out == HELD and degraded is False

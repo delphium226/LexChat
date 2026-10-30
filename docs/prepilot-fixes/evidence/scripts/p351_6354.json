@@ -1,0 +1,8 @@
+{
+  "session_id": "p351_6354",
+  "base": "6354",
+  "note": "P3.51 acceptance (Session 48): session 6354's turn 1 only, Conversational under 'legislation_and_case_law', as Thomas ran his Q16 (13 October 2026; the question is that turn verbatim). Graded: the Homeless Persons (Suspension of Referrals between Local Authorities) (Scotland) Order 2022 (ssi/2022/356) and the s.33A power of the Housing (Scotland) Act 1987 named; ss.31(3)(b), 32(3), 32(4), 32(6) and 32B(6) counted. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "legislation_and_case_law", "chat_mode": "conversational"}
+  ]
+}

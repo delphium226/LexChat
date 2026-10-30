@@ -35,6 +35,93 @@ Errors (on `main`, outside the fix plan; `docs/TODO.md` B6):
   retrying will not help and to tell the administrator. The provider's own
   response is never shown.
 
+Currency (P3.49):
+- An answer that relies on legislation made before 1963 now says that whether
+  it has since been amended or repealed is not known from this research. The
+  index holds no record of changes to legislation of that age, and its empty
+  record used to read as "never amended" (the Shops Act 1950 in Thomas's
+  13 October retest).
+
+Searching (P3.52, in progress):
+- A quick lookup now writes its legislation searches as plain sentences, which
+  the search ranks better than lists of quoted phrases.
+- The research is now given the legal professional's own question alongside the
+  assistant's research brief. Neither change yet makes it name s.38 of the
+  Transport (Scotland) Act 2001 as the provision for the bus fare cap question.
+
+Secondary legislation (P3.51, in progress):
+- When the research reads sections of an Act, it is now also told which
+  statutory instruments were made under those sections, and under the
+  lettered sections beside them, from the record of enabling powers. It has
+  not yet named the 2022 Order suspending local connection referrals in
+  Thomas's homelessness question.
+
+Case law (P3.50, in progress):
+- A judgment of up to 60,000 characters is now read in full rather than
+  summarised first. Summaries of Rex v Evans still miss its central point.
+
+Schedules (P3.12):
+- When an answer names a paragraph of a Schedule by its number but does not
+  say what it provides, the paragraph's own words are now added after it, as
+  they already were for a paragraph the answer left out. The moratorium
+  question (Insolvency Act 1986, Schedule B1 paragraphs 42 to 44) is now
+  answered in full in all three replays.
+
+Summaries (P3.47):
+- A summary of a document or a search no longer keeps a case it names
+  without a citation when the document itself does not name that case. The
+  summariser had been adding well-known cases from memory, which then read
+  as if they had been found.
+
+Research results (P1.7):
+- The research model now sees everything the system adds to a search or
+  lookup result. With the model in use (Gemini, through OpenRouter), any
+  text placed beside the structured part of a result was silently dropped
+  before the model read it: the notes on what a search can and cannot show,
+  the next-step prompts, the commencement and enabling-power records, and
+  text read from legislation.gov.uk. About three results in five carried
+  such text. Each result is now sent whole.
+
+Case law (P3.46):
+- When a case-law search names a case and the results do not include it,
+  the research step is told so, and that what the case decided must not be
+  stated as if its judgment had been read. Answers now say such a case was
+  not found and attribute its principle to a retrieved judgment that cites
+  it.
+- When a case the legal professional cited was not among the judgments a
+  search returned, the answer now says exactly that, never that the database
+  does not hold it: a search can miss a judgment the database holds (P3.55).
+
+Lists of instruments (P3.53, P3.48):
+- When a question asks which of a list of instruments made under a power have
+  some property, the answer now says how many of them were actually checked,
+  and that the rest were not, instead of reading a few examples as the whole
+  list. Where every one was checked, it says the others were searched and the
+  property was not found.
+- The answer is now told which listed instruments are recorded as revoked in
+  whole or in part, by name, and to say so against each one it names. Lists
+  of the instruments made under a power now mark them; an answer about
+  something else in those instruments does not yet always do so.
+
+Commencement (P3.54):
+- A commencement date that has not yet arrived is now stated as the date the
+  provision is due to come into force, never as a date it was brought into
+  force.
+
+Sources (P3.56):
+- A provision reached by both an http and an https address appears once in
+  the sources list, not twice.
+
+Recent instruments (P3.38):
+- Where this index holds an instrument's record but not its text, the text
+  read from legislation.gov.uk is now used to answer: the saving and
+  transitional provisions of SSI 2025/119 are stated from it, where the
+  answer used to call them unverifiable.
+- When a search within an instrument finds nothing because this index holds
+  no text of it, the research now looks the instrument up, says so, and
+  reads its text from legislation.gov.uk, instead of treating the empty
+  search as a sign the instrument lacks what was asked for.
+
 ## 2026.10.4 — 2026-10-12
 
 Seventh cut (merge `e72d3bc`): the Scottish judgments switch moves to the

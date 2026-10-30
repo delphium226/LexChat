@@ -355,6 +355,8 @@ once the provider hit its rate limit, 12 of 12 Deep Research attempts got `502` 
 Tracker as "TODO B6", P3 (recorded 2026-10-05; FIX_PLAN "External review — Thomas, 30 September
 2026").
 
+**Reported a third time by Thomas on 13 October 2026** (his retest of `v2026.10.4`: once the provider returned 429, every Deep Research attempt got `502` from `/api/research/plan`; FIX_PLAN "External review — Thomas, 13 October 2026"). `routers/research.py` still raises `502 "The planner failed. Please try again."` for any non-connection error (checked 2026-10-13).
+
 Outside the pre-pilot fix plan (not a pre-pilot defect), so it can go straight to `main`.
 
 ### B5. Add a 'Data coverage' tab to the parliament bot (feature; added 2026-07-24, unscoped)
@@ -1479,3 +1481,114 @@ The feasibility study should answer:
    the A5 response cache generalised to both LEX and SCTS.
 
 Output: a short note with the measurements and a GO / NO-GO recommendation for the user.
+
+### D25. Engineering findings from the business-rules review (booked 2026-10-28, user)
+
+The review that produced `docs/BUSINESS_RULES.md` found these. They are engineering issues, so they
+are not in that document. Each was checked against the code on 2026-10-28. None is fixed. The
+legal-content inconsistencies are in its section 15. The cross-user learning injection is D21,
+which stays parked.
+
+**Access and transport (raise first, alongside the open SPA path-traversal finding):**
+1. **`/api/system/chat` needs only a login, not an admin.** It depends on `get_current_user`
+   (`routers/system.py`), so any logged-in user can call it. It returns the full audit trace:
+   every brief, raw tool result and API call. Decide whether it should be `get_admin_user`, or
+   a dedicated eval credential.
+2. **The role is read from the token, not the database** (`dependencies.py`, `get_current_user`).
+   A demoted or deleted user keeps their access until the token expires: 7 days, or 30 with
+   "remember me" (`routers/auth.py`). Options: re-read the role per request, or a shorter
+   token with refresh.
+3. **Outbound TLS verification is off.** There are 23 `verify=False` calls: the OpenRouter and
+   Ollama clients, the LEX executor, case law, commencement dates, the legislation.gov.uk text
+   read, the made-under store, the federation client, and the parliament and Westminster tools and
+   crawler. Find out whether the target's proxy requires this. If it does, point httpx at the
+   organisation's CA bundle instead.
+4. **User text logged in full at INFO** (extends D9 Item 4, which named only the first and
+   last of these):
+   - the Manager's delegation brief (`agent/agent_core.py`, `[Worker] Starting research on:`);
+   - the learning keywords taken from every question (`agent/learning.py`,
+     `[Learning] Searching with keywords:`);
+   - Deep Research step titles (`agent/agent_core.py`);
+   - a new user's full email address (`routers/users.py`, `[EMAIL] Welcome email would be sent to`);
+   - the admin learning test query (`routers/learning.py`).
+
+**Configuration:**
+5. **The default Ollama model is `MODEL_LIST[0]`, `deepseek-v3.2:cloud`.** This was recorded in
+   July as returning HTTP 410; re-check it, then reorder or remove it. Also: `settings.max_concurrent_requests`
+   (5) is never read (the real defaults are 3 for Ollama and 10 for OpenRouter), and
+   `access_token_expire_minutes` (1 day) is not what login uses.
+
+**Stale documentation (CLAUDE.md and comments):**
+6. The cache purge is `DELETE /api/stats/cache/local`, not a POST.
+7. `request_timings.source` is NULL for `/api/chat` rows, never `"app"`: only `/api/system/chat`
+   sets it (`"eval"`). Either set `"app"` in `routers/ai.py`, or correct the docs. The dashboards
+   do not filter on it yet, so nothing reads it wrongly today.
+8. SCTS's 2 calls in flight is a process-wide semaphore (`agent/tools/scts.py`, `SCTS_CONCURRENCY`),
+   not a per-request limit.
+9. The local cache prunes never-hit rows after 90 days and any row idle for 365 days, and only
+   once it holds more than 20,000 rows (on 2% of stores). CLAUDE.md says "365-day retention for hit rows".
+10. The A4 reformat keeps any non-empty retry. It does not check that the retry is better, which
+    is what CLAUDE.md says.
+11. The comment in `routers/agent_request.py` says `AUDIT_SCHEMA_VERSION` "stays at 1"; it is 6.
+
+### D26. An Amazon Bedrock LLM provider (booked 2026-10-28, user)
+
+**Why.** If AILA moves to AWS, inference will go through the organisation's existing Amazon
+Bedrock (user, 2026-10-06), not OpenRouter. That keeps model traffic inside the organisation's
+AWS account and region. AILA supports only `ollama` and `openrouter` today
+(`agent/provider_factory.py`, `_SUPPORTED_PROVIDERS`). Nothing in `server_py/src` mentions Bedrock.
+
+**Shape.** A third provider, `bedrock`, built the way the other two are:
+- a `bedrock_client.py` with its own `chat_loop`, using the Converse / ConverseStream API (streaming
+  and tool use);
+- its settings stored in `AppSetting provider.bedrock`;
+- selected from the Admin Portal like the others, with no restart;
+- resolved through the same `ContextVar`, `RequestQueue` and summarisation semaphore.
+
+Every `if provider == "openrouter"` branch in `provider_factory.py` needs a Bedrock decision.
+
+**Decisions and questions for the user and the organisation's AWS owners:**
+1. **Authentication.** Use the EC2 instance role (no keys stored in AILA; preferred), or access
+   keys in the provider settings? The existing `api_key` field would then mean nothing for this
+   provider.
+2. **Region and data residency.** The region is eu-west-2. Which models are enabled there?
+   Cross-region inference profiles (EU or global) can process a request outside the UK. Confirm
+   which profiles, if any, are acceptable before choosing model IDs.
+3. **Which models.** These need a `BEDROCK_MODEL_LIST` with context lengths, because the
+   summarisation threshold and the case-law and cap thresholds scale from them. A model missing
+   from the list falls back to the 8,000-character threshold. A separate summarisation model is
+   needed as well.
+4. **Cost recording.** OpenRouter returns a cost per call; Bedrock returns token counts only. Cost
+   (`cost_usd`, `request_timings`, the Efficiency and Cache tabs) would need a price table per model,
+   or would be recorded as unknown.
+
+**Provider-specific behaviour to carry across (each is an `openrouter` branch today):**
+- **Output cap.** The 32,000-token cap on Worker and Manager calls (P4.10, P4.12), as `maxTokens`.
+- **Empty-reply handling.** The heavy-empty and idle-timeout rules (`utils/empty_completion.py`)
+  read completion tokens and reasoning characters. Map Bedrock's usage and stop reasons onto them,
+  or they fail open.
+- **Stream retry.** The rule of retrying only while nothing has been emitted (`_MAX_STREAM_ATTEMPTS`),
+  and the 180-second read timeout. Throttling becomes Bedrock's `ThrottlingException`.
+- **Prompt caching.** Prompt caching uses Bedrock `cachePoint` blocks for the models that support
+  them, in place of `_apply_anthropic_cache_control`, under the same `prompt_caching_enabled` flag.
+- **Tool results whole (P1.7).** Check, before any lever is measured, that the model receives
+  text beside JSON in a tool result. P1.7 found the pinned Gemini on OpenRouter did not;
+  `evidence/seam/s50/f1_truncation.py` is the probe to repeat.
+- **Message format.** Converse uses `toolUse` / `toolResult` blocks, not OpenAI-style
+  `tool_calls`. Every seam that reads or rewrites the message list (the audit trace, `seam_replay`,
+  the mode-change marker, the halt write-up round) must still see the same shape.
+
+**Deployment.**
+- A new dependency (`boto3`, or a signed httpx call) must go into the offline bundle.
+- On the current internet-restricted target, `bedrock-runtime.<region>.amazonaws.com` would need
+  whitelisting. Add a reachability test to `test_apis.ps1`, and the host to
+  `NETWORK_AND_DEPENDENCIES.md` and the `external-apis` skill.
+
+**Acceptance.** These must hold under Bedrock as they do under OpenRouter:
+- the unit tests;
+- a seam replay;
+- a small priced panel of stored questions, compared against the OpenRouter answers on the same
+  graders (`replay_report`).
+
+Model quality dominates everything else in this product (CLAUDE.md, Worker Agent Optimisations),
+so the model chosen on Bedrock matters more than the layer itself.

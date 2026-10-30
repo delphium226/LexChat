@@ -457,6 +457,39 @@ async def titles_for(legislation_ids) -> dict:
         return {}
 
 
+async def section_family_rows(act_id: str, bases) -> tuple:
+    """P3.51: `(rows, coverage)` for `utils.made_under.section_families_block`:
+    every instrument the record holds as made under a section of `act_id` whose
+    number is one of `bases`, with or without a letter (s.33 and s.33A). Like
+    `recital_for`, no database until the record is loaded; `([], {})` on any
+    failure, never raises."""
+    if not _STATE["available"]:
+        return [], {}
+    nums = [str(b) for b in bases or () if re.fullmatch(r"\d{1,4}", str(b))]
+    act = str(act_id or "").strip().strip("/")
+    if not act or not nums:
+        return [], {}
+    try:
+        from ..database import async_session_maker
+        async with async_session_maker() as session:
+            rows = (await session.execute(text(
+                "SELECT p.provision, p.legislation_id, i.title, p.act_title, "
+                "i.revocation, i.revocation_checked "
+                "FROM made_under_powers p JOIN made_under_instruments i USING (legislation_id) "
+                "WHERE p.act_id = :act AND p.provision ~ :rx"),
+                {"act": act, "rx": "^section/(" + "|".join(nums) + ")[A-Z]*$"})).all()
+            if not rows:
+                return [], {}
+            ref = (await session.execute(text(
+                "SELECT count(*), max(harvested_at) FROM made_under_instruments "
+                "WHERE source = 'refresh'"))).one()
+        refreshed, refreshed_to = int(ref[0] or 0), (ref[1].date().isoformat() if ref[1] else None)
+        return [tuple(r) for r in rows], coverage(read_manifest(), refreshed_to, refreshed)
+    except Exception as e:
+        logger.warning("[MadeUnder] Section family query failed: %s", e)
+        return [], {}
+
+
 # ---------------------------------------------------------------------------
 # Daily refresh
 # ---------------------------------------------------------------------------

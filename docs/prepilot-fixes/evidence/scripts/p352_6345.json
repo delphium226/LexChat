@@ -1,0 +1,8 @@
+{
+  "session_id": "p352_6345",
+  "base": "6345",
+  "note": "P3.52 acceptance (Session 47): session 6345's turn 1 only, Conversational under 'legislation_only' and no jurisdiction filter, as Thomas ran his Q17 (13 October 2026; the question is that turn verbatim). Graded: s.38 of the Transport (Scotland) Act 2001 (asp/2001/2) cited as the enabling provision, and whether the answer distinguishes a national travel concession scheme for eligible persons (s.40 of the Transport (Scotland) Act 2005) from a fare cap for all passengers. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {"from_turn": 1, "research_mode": "legislation_only", "chat_mode": "conversational"}
+  ]
+}

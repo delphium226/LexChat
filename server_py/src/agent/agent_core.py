@@ -30,8 +30,11 @@ from ..utils.citation_links import (
 )
 from ..utils.discovery_budget import new_search_budget
 from ..utils.instrument_lookup import (
-    LOOKUP_TOOL, parse_lookup_result, routed_lookup_block, section_search_lookup,
+    LOOKUP_TOOL, empty_section_lookup, parse_lookup_result, routed_lookup_block,
+    section_search_lookup,
 )
+from ..utils.lawyer_words import with_lawyer_words
+from ..utils.made_under import prune_section_family_entries
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
 from ..utils.paragraph_restore import (
@@ -60,11 +63,13 @@ from ..utils.search_scope import (
     case_law_scope_footer,
     strip_answer_footer,
     incomplete_steps_note,
+    list_coverage_note,
     strip_scope_blocks,
     worker_scope_block,
 )
 from ..utils.source_naming import is_legislation, named_in, token_in
 from ..utils import rail_titles
+from ..utils.rail_dedupe import collapse_scheme_duplicates
 from ..utils.suggestions import diagnose_suggestions, extract_suggestions
 from .agent_shared import describe_agent_error, run_worker_tool
 from .federation_client import (
@@ -231,9 +236,13 @@ async def run_worker_agent(
     _audit = get_audit_collector()
     _audit_delegation = _audit.start_delegation(query) if _audit else None
 
+    # P3.52 (c): the lawyer's latest message after the brief, in the Worker's
+    # message only. The log line above and the audit keep the brief as the
+    # Manager wrote it; so does every other reader of `query` below.
     messages = [
         {"role": "system", "content": get_worker_system_prompt(research_mode, cfg)},
-        {"role": "user", "content": query},
+        {"role": "user", "content": with_lawyer_words(
+            query, cfg.get("_cache_key_query"), research_mode, cfg.get("_chat_mode"))},
     ]
 
     # P3.25: the quick-lookup Worker's list omits `get_legislation_text`.
@@ -280,6 +289,9 @@ async def run_worker_agent(
     # P4.24: the exact title each `lookup_legislation` in this run returned,
     # for the Sources rail's bare-id entries. A lookup adds no rail source.
     lookup_titles: dict = {}
+    # P3.38: every lookup this run made (legislation_id -> its result), so the
+    # code lookup after an empty section search reuses one rather than repeat it.
+    lookup_results: dict = {}
 
     async def _run_tool(name: str, args: dict, result_suffix: str = "") -> str:
         out = await _run_tool_inner(name, args, result_suffix)
@@ -287,7 +299,17 @@ async def run_worker_agent(
             got = parse_lookup_result(out)
             if got and got.get("legislation_id") and got.get("title"):
                 lookup_titles.setdefault(got["legislation_id"], got["title"])
+            if got and got.get("legislation_id"):
+                lookup_results.setdefault(got["legislation_id"], out)
         return out
+
+    # P3.38: the instruments this run looked up in code after a section search
+    # of them returned no provision, each once.
+    empty_lookups: dict = {}
+
+    async def _empty_search_lookup(args: dict):
+        return await empty_section_lookup(args, empty_lookups, _run_tool, log=search_log,
+                                          seen=lookup_results)
 
     async def _run_tool_inner(name: str, args: dict, result_suffix: str = "") -> str:
         out = await run_worker_tool(
@@ -305,6 +327,7 @@ async def run_worker_agent(
             search_log=search_log,
             result_suffix=result_suffix,
             provision_fetches=provision_fetches,
+            empty_search_lookup=_empty_search_lookup,
         )
         handed_paras.extend(handed_paragraphs(out))
         return out
@@ -349,7 +372,7 @@ async def run_worker_agent(
             query, [t.get("function", {}).get("name") for t in worker_tools],
             worker_tool_executor)
         if _block:
-            messages[1]["content"] = query + _block
+            messages[1]["content"] += _block
     except asyncio.CancelledError:
         raise
     except Exception:
@@ -517,6 +540,10 @@ async def run_worker_agent(
     # rail, and the `source_filter_fallback` counter (the Worker vouched for
     # none of its sources) would never fire — a diagnostic corrupting the
     # measurement of a different bucket.
+    # P3.51: the made-under block's entries speak in the limb and the footer
+    # only for an instrument this report names; a family the Worker did not
+    # use adds nothing to either.
+    search_log[:] = prune_section_family_entries(search_log, result.get("content", "") or "")
     _scope = worker_scope_block(search_log, cfg)
     if _scope:
         result["content"] = (result.get("content", "") or "") + _scope
@@ -1305,6 +1332,10 @@ async def process_user_request(
     # P4.24: after R, which re-admits change-record instruments titled by id.
     accumulated_sources = await title_rail_sources(
         accumulated_sources, retrieved_sources, retrieved_titles)
+    # P3.56: one entry for a provision reached by an http and an https URL.
+    accumulated_sources, _collapsed = collapse_scheme_duplicates(accumulated_sources)
+    if _collapsed:
+        logger.info("[Manager] Collapsed %d duplicate rail entr(ies)", _collapsed)
 
     if accumulated_sources:
         final["sources"] = [
@@ -1419,8 +1450,13 @@ def build_synthesis_messages(
     steps_count: Optional[int] = None,
     research_mode: str = "legislation_only",
     lost: Optional[list] = None,
+    searches: Optional[list] = None,
 ) -> list:
     """The Deep Research synthesis call's messages, from the steps' findings.
+
+    `searches` (every step's scope record) carries P3.53's list-coverage note:
+    one step may list what a later step searches, so the line is computed over
+    all of them, here, and not in any one step's block. None adds nothing.
 
     `research_mode` picks the system prompt (P4.7): what the research type
     searched and did not, and its report sections. It is a parameter rather
@@ -1454,6 +1490,7 @@ def build_synthesis_messages(
         halts or [], steps_count if steps_count is not None else len(step_findings),
         lost=lost,
     )
+    synthesis_user += list_coverage_note(searches)
     return [
         {"role": "system", "content": get_deep_research_synthesis_prompt(research_mode)},
         {"role": "user", "content": synthesis_user},
@@ -1586,7 +1623,7 @@ async def run_deep_research(
     synthesis_messages = build_synthesis_messages(
         user_query, approved_plan, step_findings, halts, len(steps),
         research_mode=_get_cfg().get("_research_mode") or "legislation_only",
-        lost=lost,
+        lost=lost, searches=all_searches,
     )
 
     async def _no_tools_executor(name: str, args: dict) -> str:
@@ -1706,6 +1743,10 @@ async def run_deep_research(
     # P4.24, as on the Manager path.
     accumulated_sources = await title_rail_sources(
         accumulated_sources, retrieved_sources, retrieved_titles)
+    # P3.56, as on the Manager path.
+    accumulated_sources, _collapsed = collapse_scheme_duplicates(accumulated_sources)
+    if _collapsed:
+        logger.info("[DeepResearch] Collapsed %d duplicate rail entr(ies)", _collapsed)
 
     if accumulated_sources:
         final["sources"] = [
