@@ -10041,3 +10041,35 @@ P1 the target lacks).
 **Take next:** P3.56's $0 measurement; then P3.53, P3.54, P3.55's seam draw, P3.34, P3.28's instruction, P3.48,
 and the re-measure of P3.51, P3.52 and P3.50 on top of P1.7. **The user's:** the next cut (the target lacks P1.7
 and P3.46's note in use and, on `main`, the traversal fix), the Fix Tracker (v54).
+
+## Session 51 (continued, director model) — 2026-10-29/30 — P3.53, P3.54, P3.55, P3.56 done; P3.48 not met; eighth cut, `v2026.10.5` ($15.95)
+
+- **Director model (user decision):** this session discussed and committed; build and measurement workers ran as
+  background agents in hand-made worktrees (`F:/LexChat-worktrees/<row>`; agent worktree isolation fails on the
+  F: junction), never pushed; every new wording came to the user before merging.
+- **Correction to the entries above:** the rail's unused-share rise after P1.7 was `panel_before` holding reps
+  1-3 against `wave5_p17`'s rep 1, plus 6382; P1.7's direct effect is nil. The P3.56 worker's first "4 dropped
+  before, 0 after" and "32 duplicates" were also overstated (9 true http/https pairs).
+- **Merged to the branch (each with the full suite):** P3.54 (`a62d2a1`), P3.55 (`cda8781`), P3.56's grader and
+  dedupe (`3cfb915`), P3.53 with P3.48 (`fd5103a`; gate at 2 and 8 ids a class, user decisions, `3529e9b`).
+  Suite **4,251**.
+- **Combined sweep (user-agreed, cap $28): `wave5_s51`, $15.95**, served by `fd5103a`, settings pinned: the
+  scripts p37_6409, p37r_6383, p350_6347, p351_6354, p352_6345 n=3 ($5.05), 6359 and 6382 n=3 ($9.34), 6374 n=1
+  ($1.56). A first launch passed script names, not paths, and stopped at $0. `replay check`, `replay pin`;
+  uvicorn (PID 9908) and keep-awake (7776); `replay restore`; both stopped, port 8000 free, no pin file.
+- **Graded** (`seam/s51/grade_all_wave5_s51.txt`, `listcov_s51.txt`, `future_dates_s51.txt`, `rail_s51.txt`):
+  P3.54 future tense 3 of 3 (before 3 past of 5); P3.55 'not among the results' 3 of 3 (before 'does not hold'
+  3 of 3); P3.53 `listcov` 7 of 8, 8 of 8 by hand (before 0 of 6), the 'Discrepancy note' 0 of 3; P3.48 t3 3 of
+  3, t1 0 of 3 (5 of 9 marked; before 0 of 25); rail 0 fall-back turns, 45 dropped (35 in 6382's Deep Research
+  list), the collapse fired once. Unchanged on top of P1.7: P3.50 (Q12 0 of 3), P3.51 (Q16 Order 0 of 3), P3.52
+  (Q17 s.38 2 of 3 as a funding route, never as the provision). No halts; one lost Worker reply (6382 r2,
+  labelled). Watch: 6374's 3 provision links at the wrong level (0 before), unread.
+- **User decisions:** P3.53, P3.54, P3.55, P3.56 ticked; P3.48 kept in progress (next, a mark at the answer
+  seam); the rail bar kept with the DROPPED list hand-read each sweep. FIX_PLAN: `plan_lint` 0, 81 of 112, 4 in
+  progress, 8 of 14.
+- **Cut (user decision, 2026-10-30):** the branch merged to `main` as release `v2026.10.5`; `v2026.10.4` is its
+  rollback point. The Fix Tracker updated at the user's request.
+
+**Take next:** P3.48's answer-seam mark (wording first), P3.34, P3.28's instruction; the selection/synthesis
+lever for P3.50-P3.52 is the user's to time. **The user's, on the target:** pull `v2026.10.5` and restart; the
+traversal follow-ups (HTTP log check for `..`, `%2e`, `%5c`, `/C:`; a real `JWT_SECRET` by `setx /M`).

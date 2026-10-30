@@ -79,6 +79,29 @@ Case law (P3.46):
   stated as if its judgment had been read. Answers now say such a case was
   not found and attribute its principle to a retrieved judgment that cites
   it.
+- When a case the legal professional cited was not among the judgments a
+  search returned, the answer now says exactly that, never that the database
+  does not hold it: a search can miss a judgment the database holds (P3.55).
+
+Lists of instruments (P3.53, P3.48):
+- When a question asks which of a list of instruments made under a power have
+  some property, the answer now says how many of them were actually checked,
+  and that the rest were not, instead of reading a few examples as the whole
+  list. Where every one was checked, it says the others were searched and the
+  property was not found.
+- The answer is now told which listed instruments are recorded as revoked in
+  whole or in part, by name, and to say so against each one it names. Lists
+  of the instruments made under a power now mark them; an answer about
+  something else in those instruments does not yet always do so.
+
+Commencement (P3.54):
+- A commencement date that has not yet arrived is now stated as the date the
+  provision is due to come into force, never as a date it was brought into
+  force.
+
+Sources (P3.56):
+- A provision reached by both an http and an https address appears once in
+  the sources list, not twice.
 
 Recent instruments (P3.38):
 - Where this index holds an instrument's record but not its text, the text
