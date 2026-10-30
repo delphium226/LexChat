@@ -642,18 +642,6 @@ def _quick_lookup_route(rule: str) -> str:
 _LEGISLATION_QUERY_WORDING = """QUERY WORDING (legislation searches): `search_legislation` and `search_legislation_sections` rank results by meaning, not by matching words. Unless you are searching for an Act by its exact title, write the query as a plain sentence saying what the provision would do, in the question's own words (for example "duty of an education authority to provide free school transport"), not as quoted phrases joined by OR or AND, which rank the provision you need lower. Where the question asks what enables a measure the legislation may not name in those words (a cap, a subsidy, a charge), the power may be a general one through which the measure is funded or required, such as a power to make grants on conditions: word the query to cover that too, and say which kind of power each provision you cite is."""
 
 
-# P3.52 fix B (Session 52, a draft for the user's approval): the Worker held
-# s.38 of the Transport (Scotland) Act 2001 in 6 of 12 stored Q17 runs and led
-# with it in none (s.40 of the 2005 Act, a concession scheme for eligible
-# persons, led 4 times). The rule is about selection, not search, so it goes in
-# the quick-lookup Worker's OUTPUT, and only there; every other prompt is
-# unchanged (evidence/seam/s52/levA/rebuild_diff_B.py). It is sentences at the
-# end of the citation bullet, not a bullet of its own: that OUTPUT keeps
-# exactly four bullets (P2.4's measured format invariant, pinned in
-# test_case_law_gap.py, test_citation_depth.py and test_mode_change.py).
-_ENABLING_PROVISION_LEAD = """Where the brief asks which provision enables or empowers someone to do a thing, cite first the provision whose own words give the power to do that thing itself, or, for a measure the legislation does not name, the power through which it can be required or paid for (such as grants on conditions). A power to make a narrower or different scheme, such as one for particular classes of person, comes after it, with what it is limited to; do not give it as the answer unless its words cover the thing asked about."""
-
-
 WORKER_SYSTEM_PROMPT_CONVERSATIONAL ="""You are a Legal Research Support Agent operating in quick-lookup mode.
 
 YOUR MANDATE:
@@ -687,7 +675,7 @@ After Phase 2 (and 2b or 2c where they apply), write your answer. Do not iterate
 
 OUTPUT:
 - 2–5 sentences of concise prose, or a short bullet list for multiple points.
-- Include the relevant citation (Act + the subsection or paragraph that states the point, e.g. s.7(2) or Sch 2 para 3(1), or case name + NCN) and URL if provided. When you cite one subsection of a section, say in a short clause what that section's other subsections provide, so the reader sees the whole provision and not only the limb that applies; that clause does not count against the 2-5 sentences above. """ + _ENABLING_PROVISION_LEAD + """
+- Include the relevant citation (Act + the subsection or paragraph that states the point, e.g. s.7(2) or Sch 2 para 3(1), or case name + NCN) and URL if provided. When you cite one subsection of a section, say in a short clause what that section's other subsections provide, so the reader sees the whole provision and not only the limb that applies; that clause does not count against the 2-5 sentences above.
 - Do NOT use formal report headers (BLUF, Detailed Analysis, References, etc.).
 - If the retrieved text does not answer the question, say so plainly and say what was searched; do not suggest changing a mode, research type or setting (the assistant relaying your answer decides that). If an instrument or case the brief cites was not found, say that this index does not hold it; never suggest the citation is wrong, and never ask the user to check or verify it.
 
