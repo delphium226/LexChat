@@ -267,6 +267,9 @@ _NOT_HELD_RULE = """NOT HELD IS NOT A WRONG CITATION:
 # the quick-lookup Worker's prompt: that Worker is not offered the tool. The
 # load-bearing half is code: the tool filters the rows, and its block, the
 # Manager's limb and the footer each say the list is one search, not a census.
+# Written out INSIDE each prompt's literal (not spliced in), so `seam_replay`'s
+# literal reader (`_prompt_constant_at`) still reads each prompt whole;
+# `tests/test_find_definitions.py` checks both copies equal this constant.
 _DEFINITIONS_TOOL_LINE = (
     "- `find_definitions`: when the question asks where or how a term is defined in "
     "legislation, or for every statutory definition of a term, call it once with the term: "
@@ -318,7 +321,7 @@ TOOL GUIDANCE:
   - Use the exact short title of the Act, not a topic description.
 - `search_legislation_sections`: The primary retrieval tool. Use after `search_legislation` to pull specific provisions from a known Act. Pass the `legislation_id` and a query describing the specific provision (e.g. "general duty of employer", "penalty", "definition of worker"). This is how you get the actual legal text — use it for every Act found in Phase 1.
 - `get_legislation_changes`: The ONLY source of commencement, amendment, repeal and revocation relations. Pass a `legislation_id` and a direction. Returns the instruments involved and the provisions affected, grouped — with no dates of their own (code adds a commencement's `in_force` date where legislation.gov.uk's record gives one), and no enabling power.
-""" + _DEFINITIONS_TOOL_LINE + """
+- `find_definitions`: when the question asks where or how a term is defined in legislation, or for every statutory definition of a term, call it once with the term: it searches all legislation and lists the instruments that define the term, each with its defining words, provision link and stated extent. Its list comes from one search, so never present it as every definition there is.
 - `get_legislation_text`: Fallback only. Use when `search_legislation_sections` returns nothing useful, or when the question genuinely requires the full Act text. Do not use as a first step.
 - Never answer from memory alone. If you have not called at least `search_legislation` followed by `search_legislation_sections`, you have not done your job.
 
@@ -427,7 +430,7 @@ Phase 1 typically returns more results than you need — a single search can sur
 - JURISDICTION SCOPE: when the brief names a jurisdiction (e.g. Scotland, England and Wales, Northern Ireland), retrieve sections ONLY for the legislation that applies in that jurisdiction (UK legislation that extends there included). For a Scotland question, do not pull English, Welsh, or Northern Irish instruments even if they appear in Phase 1 results. If a judgment you have read cites legislation across several jurisdictions, follow up only on the legislation for the jurisdiction the brief asks about.
 - For each SELECTED legislation_id, call `search_legislation_sections` — start with ONE call per legislation_id, combining all aspects into a single query. Search it again only for an aspect that call did not return: at most 3 times per legislation_id in this step (calls issued together in one turn count once); further calls on it are refused.
 - Issue all Phase 2 searches in a single turn.
-""" + _DEFINITIONS_TOOL_LINE + """
+- `find_definitions`: when the question asks where or how a term is defined in legislation, or for every statutory definition of a term, call it once with the term: it searches all legislation and lists the instruments that define the term, each with its defining words, provision link and stated extent. Its list comes from one search, so never present it as every definition there is.
 
 PHASE 3 — CASE LAW RESEARCH:
 Call `search_case_law` to find judgments relevant to this question. Issue TWO types of query in a single turn:

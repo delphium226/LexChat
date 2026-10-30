@@ -489,14 +489,15 @@ def definitions_note(raw_result: Any) -> str:
     query = _quote_safe(d.get("query"))
     rows = int(d.get("rows_read") or 0)
     n = int(d.get("count") or 0)
-    head = (f"\n\n[SEARCH SCOPE — definitions search: code searched all legislation in the "
-            f"index once, for {query}, and read the {rows} provisions that matched it best")
+    opening = ("\n\n[SEARCH SCOPE — definitions search: code searched all legislation in the "
+               f"index once (query: {query})")
+    provisions = "provision" if rows == 1 else "provisions"
+    head = f"{opening}, read the {rows} {provisions} that matched it best"
     if not rows:
-        head = (f"\n\n[SEARCH SCOPE — definitions search: code searched all legislation in "
-                f"the index once, for {query}, and it returned no provisions")
+        head = f"{opening}, and it returned no provisions"
     if not n:
-        none_kept = (f". None of them puts \"{term}\" in quotation marks followed by a defining "
-                     "word") if rows else ""
+        none_kept = (f", and found none that puts \"{term}\" in quotation marks followed by a "
+                     "defining word") if rows else ""
         return (
             head + none_kept + ". That is a statement about this one search, NOT evidence "
             "that no legislation defines the term: say what was searched, and look for a "

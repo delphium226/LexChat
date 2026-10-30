@@ -1072,9 +1072,10 @@ def _definitions_limb(log: Optional[list]) -> str:
             parts.append(f'for "{term}" it did not complete, so it established nothing')
             continue
         if not e.get("count"):
-            parts.append(f'for "{term}" none of the {e.get("rows")} provisions it read defines '
-                         "the term in quotation marks, which is not evidence that no "
-                         "legislation defines it")
+            read = (f"none of the {e.get('rows')} provision(s) it read defines the term in "
+                    "quotation marks" if e.get("rows") else "the search returned no provisions")
+            parts.append(f'for "{term}" {read}, which is not evidence that no legislation '
+                         "defines it")
             continue
         bits = [f'for "{term}" {e.get("count")} instrument(s) define the term in quotation marks '
                 f'among the {e.get("rows")} provisions it read']
