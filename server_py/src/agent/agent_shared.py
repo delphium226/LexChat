@@ -46,7 +46,8 @@ from ..utils.instrument_lookup import legislation_id as lookup_legislation_id
 from .tools.executor import fetch_provision_list, fetch_text_with_schedules
 from ..utils.instrument_lookup import LOOKUP_TOOL
 from ..utils.made_under import MADE_UNDER_TOOL, made_under_note
-from ..utils.search_scope import record_made_under
+from ..utils.definitions import DEFINITIONS_TOOL, definitions_note
+from ..utils.search_scope import record_made_under, record_definitions
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
     legislation_stop_message,
@@ -247,6 +248,29 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "sub": f"recorded as {effect} for provisions of {subject}",
                 "cite": rel_lid,
                 "url": group.get("url") or "",
+            })
+
+    elif name == DEFINITIONS_TOOL:
+        # P3.34. Each instrument the definitions search found defining the
+        # term, so an answer naming one can show it in the rail. No excerpt,
+        # for P3.5's reason above: `_source_is_used` would then keep every
+        # one of up to 40 whether or not the answer names it. No entry for an
+        # instrument without a working link (`reference_unclear`).
+        term = data.get("term") or ""
+        for d in data.get("definitions") or []:
+            if not isinstance(d, dict) or not d.get("url"):
+                continue
+            lid = d.get("legislation_id") or ""
+            if not lid or any(s.get("_lid") == lid for s in accumulator):
+                continue
+            prov = d.get("provision") or ""
+            accumulator.append({
+                "_lid": lid,
+                "kind": _legislation_kind(lid),
+                "title": d.get("title") or lid,
+                "sub": f'defines "{term}"' + (f" ({prov})" if prov else ""),
+                "cite": lid,
+                "url": d.get("url") or "",
             })
 
     elif name == "search_case_law":
@@ -1152,7 +1176,7 @@ async def run_worker_tool(
     if search_budget is not None:
         if legislation_budget_blocks(search_budget, name):
             record_budget_stop(search_log, name, args, search_budget)
-            refusal = (legislation_stop_message(search_budget),
+            refusal = (legislation_stop_message(search_budget, name),
                        "Discovery budget spent", "Search limit reached")
         elif section_budget_blocks(search_budget, name, args):
             # Batch 8 A2: where code has read this instrument's complete
@@ -1248,6 +1272,8 @@ async def run_worker_tool(
             # P3.7: and a memoised lookup is still this step's lookup. A model
             # repeating the lookup code ran for it is served from here.
             record_lookup(search_log, name, args, hit["raw"])
+            # P3.34: and a memoised definitions search is still this step's.
+            record_definitions(search_log, name, args, hit["raw"])
             # P3.38: and what the read from legislation.gov.uk recorded.
             if search_log is not None and hit.get("published_entries"):
                 search_log.extend(dict(e) for e in hit["published_entries"])
@@ -1652,6 +1678,12 @@ async def run_worker_tool(
         # P3.31: the reverse question, answered from the made-under record.
         enabling_note = made_under_note(raw_result)
         record_made_under(search_log, raw_result)
+    # P3.34: what the definitions search read and kept, for the Worker (the
+    # block) and for the Manager's limb and the footer (the record). From the
+    # RAW result, which is also what the Worker receives: it is never
+    # summarised (below). Self-gated on the tool name.
+    definitions_block = definitions_note(raw_result) if name == DEFINITIONS_TOOL else ""
+    record_definitions(search_log, name, args, raw_result)
     # P3.31, the forward question: where the record read here carries no
     # recital (0 of 28 SSIs at `/legislation/text`, P2.3), the made-under
     # record may hold the instrument's as-made preamble. Only the permitting
@@ -1767,7 +1799,10 @@ async def run_worker_tool(
     # P3.31: the made-under list is bounded by construction (`MAX_LISTED`,
     # compact rows), and a summary that dropped instruments from it would
     # undo the tool, so it always reaches the Worker whole.
-    if (len(result) > _threshold or _over_budget) and name != MADE_UNDER_TOOL:
+    # P3.34: nor is the definitions list, for the same reason; it is sized
+    # under its own bound (`definitions.DEFINITIONS_WHOLE_CHARS`).
+    if (len(result) > _threshold or _over_budget) and name not in (MADE_UNDER_TOOL,
+                                                                   DEFINITIONS_TOOL):
         if _over_budget and len(result) <= _threshold:
             logger.info(
                 f"[Worker] Context budget reached "
@@ -1944,6 +1979,7 @@ async def run_worker_tool(
     # ("call search_legislation_sections with these ids") stays the last thing
     # the model reads on a productive search.
     result += scope_note
+    result += definitions_block
     result += not_held
     result += published_note
     result += enabling_note

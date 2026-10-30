@@ -132,6 +132,7 @@ __all__ = [
     "record_not_held",
     "record_lookup",
     "lookup_scope_footer",
+    "record_definitions",
 ]
 
 # Measured with `python -m tools.lex_probe --coverage`, which also runs the
@@ -1019,6 +1020,139 @@ def _made_under_footer_clause(entries: Optional[list]) -> str:
         f" The record of enabling powers consulted here covers {cov}; anything "
         "outside that coverage was not checked." + revoked + _list_coverage_footer(entries)
     )
+
+
+# ---------------------------------------------------------------------------
+# P3.34 — the definitions search (`find_definitions`)
+# ---------------------------------------------------------------------------
+#
+# One corpus-wide section search for where a term is defined
+# (`utils/definitions.py`). The Manager, the Deep Research synthesis and the
+# legal professional never see its result, and a list of definitions read
+# without its edge is how "these are all the statutory definitions" gets
+# written. So each run is recorded (`record_definitions`), and the limb and the
+# footer clause say what was searched. Every text here is gated on an entry the
+# tool wrote: a turn that did not run it is byte-identical.
+DEFINITIONS_ENTRY = "definitions_search"
+_MAX_DEFINITION_TERMS = 3
+
+
+def record_definitions(log: Optional[list], name: str, args: dict, data: Any) -> None:
+    """Record one `find_definitions` result. Self-gated on the tool name;
+    an error string is recorded as not ok. Never raises."""
+    if log is None:
+        return
+    try:
+        from .definitions import DEFINITIONS_TOOL, parse_result
+
+        if name != DEFINITIONS_TOOL:
+            return
+        d = parse_result(data)
+        if d is None or d.get("error"):
+            log.append({"tool": DEFINITIONS_ENTRY, "ok": False,
+                        "term": str((args or {}).get("term") or "")[:80]})
+            return
+        log.append({
+            "tool": DEFINITIONS_ENTRY, "ok": True,
+            "term": str(d.get("term") or "")[:80],
+            "query": str(d.get("query") or "")[:120],
+            "rows": int(d.get("rows_read") or 0),
+            "count": int(d.get("count") or 0),
+            "listed": int(d.get("listed") or 0),
+            "not_stated": int(d.get("extent_not_stated") or 0),
+            "removed": int(d.get("removed_by_filters") or 0),
+            "longer": int(d.get("longer_terms_count") or 0),
+            "jurisdiction": str(d.get("jurisdiction") or "")[:40],
+        })
+    except Exception:
+        pass
+
+
+def _definitions_rows(log: Optional[list]) -> list:
+    return [e for e in (log or []) if isinstance(e, dict) and e.get("tool") == DEFINITIONS_ENTRY]
+
+
+def _definitions_limb(log: Optional[list]) -> str:
+    """The worker-block line: what the definitions search read and kept. ""
+    when the tool did not run."""
+    rows = _definitions_rows(log)
+    if not rows:
+        return ""
+    parts = []
+    for e in rows:
+        term = str(e.get("term") or "").replace('"', "'")
+        if not e.get("ok"):
+            parts.append(f'for "{term}" it did not complete, so it established nothing')
+            continue
+        if not e.get("count"):
+            read = (f"none of the {e.get('rows')} provision(s) it read defines the term in "
+                    "quotation marks" if e.get("rows") else "the search returned no provisions")
+            parts.append(f'for "{term}" {read}, which is not evidence that no legislation '
+                         "defines it")
+            continue
+        bits = [f'for "{term}" {e.get("count")} instrument(s) define the term in quotation marks '
+                f'among the {e.get("rows")} provisions it read']
+        if e.get("listed", 0) < e.get("count", 0):
+            bits.append(f"{e.get('listed')} of them listed to the research agent")
+        if e.get("not_stated"):
+            bits.append(f"{e.get('not_stated')} with no extent stated in the index")
+        if e.get("jurisdiction"):
+            bits.append(f"{e.get('removed')} left out as stated to extend outside "
+                        f"{e.get('jurisdiction')}")
+        if e.get("longer"):
+            bits.append(f"{e.get('longer')} definition(s) of longer terms containing it "
+                        "noted apart")
+        parts.append(", ".join(bits))
+    return (
+        "Definitions search run (one search of all legislation in the index): "
+        + "; ".join(parts) + ". It read only the provisions that best matched its wording, "
+        "so it is not a census: never say a list from it is every definition of the term, "
+        "or that no other legislation defines it."
+    )
+
+
+def _definitions_terms(rows: list) -> str:
+    terms = []
+    for e in rows:
+        t = str(e.get("term") or "").replace('"', "'").strip()
+        if t and t.lower() not in {x.lower() for x in terms}:
+            terms.append(t)
+    shown = _and_join([f'"{t}"' for t in terms[:_MAX_DEFINITION_TERMS]])
+    if len(terms) > _MAX_DEFINITION_TERMS:
+        shown += f" and {len(terms) - _MAX_DEFINITION_TERMS} more"
+    return shown
+
+
+def _definitions_sentence(rows: list) -> str:
+    """What the definitions search established, for the legal professional:
+    the second half of the footer's definitions sentence."""
+    ok = [e for e in rows if e.get("ok")]
+    if not ok:
+        return "; that search did not complete, so nothing above rests on it."
+    if not any(e.get("count") for e in ok):
+        return ("; none of the provisions that best matched the search defines it in "
+                "quotation marks, which is not the same as the term being undefined in law.")
+    return ("; the provisions defining it in quotation marks among those that best matched "
+            "the search were listed, so a definition worded differently, or not among them, "
+            "may not appear above.")
+
+
+def _definitions_footer_clause(entries: Optional[list]) -> str:
+    """P3.34's clause on the footer of a turn that also searched the index
+    some other way. "" when the tool did not run."""
+    rows = _definitions_rows(entries)
+    if not rows:
+        return ""
+    return (f" All legislation in the index was also searched once for provisions defining "
+            f"{_definitions_terms(rows)}{_definitions_sentence(rows)}")
+
+
+def _definitions_only_head(entries: Optional[list]) -> str:
+    """The footer's opening where the definitions search is the only search
+    of the index this turn ran (`section_scope_footer`'s first branch)."""
+    rows = _definitions_rows(entries)
+    return (f"for this reply all legislation in the index was searched once for provisions "
+            f"defining {_definitions_terms(rows)}{_definitions_sentence(rows)}")
 
 
 # ---------------------------------------------------------------------------
@@ -2359,7 +2493,7 @@ def _currency_limb(log: Optional[list]) -> str:
     touched = [
         e for e in log
         if e.get("tool") in ("search_legislation", "search_legislation_sections",
-                             "change_record")
+                             "change_record", DEFINITIONS_ENTRY)
     ]
     rows = [e for e in log if e.get("tool") == "currency"]
     if not touched and not rows:
@@ -2813,7 +2947,8 @@ def record_budget_stop(log: Optional[list], name: str, args: dict, budget: Optio
         log.append({
             "tool": _BUDGET_TOOL,
             "blocked_tool": name,
-            "query": str((args or {}).get("query") or "")[:200],
+            # P3.34: a refused `find_definitions` carries a term, not a query.
+            "query": str((args or {}).get("query") or (args or {}).get("term") or "")[:200],
             "limit": budget.get("limit"),
             "run": budget.get("id"),
         })
@@ -3168,6 +3303,10 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _made_under = _made_under_limb(log)
     if _made_under:
         lines.append(_made_under)
+    # P3.34: the definitions search, next to the made-under list it resembles.
+    _definitions = _definitions_limb(log)
+    if _definitions:
+        lines.append(_definitions)
     # P3.53: straight after the list it qualifies.
     _list_cov = _list_coverage_limb(log, cfg)
     if _list_cov:
@@ -3201,7 +3340,7 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _published = published_limb(log)
     if _published:
         lines.append(_published)
-    if _lookup and not searches and not sections:
+    if _lookup and not searches and not sections and not _definitions:
         # P3.7: a step that only looked instruments up has no search terms, so
         # the rule below would demand quoting terms that are not there (P2.9's
         # defect in a new place). Every other shape keeps it byte for byte.
@@ -4181,6 +4320,7 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         f"{_section_budget_footer_clause(all_entries)}"
         f"{_enabling_footer_clause(all_entries)}"
         f"{_made_under_footer_clause(all_entries)}"
+        f"{_definitions_footer_clause(all_entries)}"
         f"{_relations_footer_clause(all_entries)}"
         f"{_currency_footer_clause(all_entries)}"
         f"{_lookup_footer_clause(all_entries)}"
@@ -4281,7 +4421,11 @@ def carried_scope_footer(
     """
     try:
         entries = list(searches or [])
-        if any(e.get("tool") in _SEARCH_TOOLS for e in entries):
+        # P3.34: a definitions search is a search of the index this reply
+        # ran, so "no search ... was run for this reply" would be false;
+        # `section_scope_footer` states it instead.
+        if any(e.get("tool") in _SEARCH_TOOLS or e.get("tool") == DEFINITIONS_ENTRY
+               for e in entries):
             return ""
         earlier = _earlier_footers(messages)
         if not earlier:
@@ -4396,7 +4540,20 @@ def section_scope_footer(searches: Optional[list]) -> str:
         rows = [e for e in entries
                 if isinstance(e, dict) and e.get("tool") == _SECTION_TOOL]
         if not rows:
-            return ""
+            # P3.34: a turn whose only search of the index was the
+            # definitions search. Same clause set as below.
+            if not _definitions_rows(entries):
+                return ""
+            return (
+                f"\n\n*Search scope: {_definitions_only_head(entries)}"
+                f"{_budget_footer_clause(entries)}"
+                f"{_enabling_footer_clause(entries)}"
+                f"{_made_under_footer_clause(entries)}"
+                f"{_relations_footer_clause(entries)}"
+                f"{_currency_footer_clause(entries)}"
+                f"{_lookup_footer_clause(entries)}"
+                f"{case_law_scope_clause(entries)}*"
+            )
         ids = []
         for e in rows:
             lid = str(e.get("legislation_id") or "").strip()
@@ -4414,6 +4571,7 @@ def section_scope_footer(searches: Optional[list]) -> str:
             f"{_section_budget_footer_clause(entries)}"
             f"{_enabling_footer_clause(entries)}"
             f"{_made_under_footer_clause(entries)}"
+            f"{_definitions_footer_clause(entries)}"
             f"{_relations_footer_clause(entries)}"
             f"{_currency_footer_clause(entries)}"
             f"{_lookup_footer_clause(entries)}"

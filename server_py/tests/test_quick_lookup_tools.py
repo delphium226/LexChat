@@ -87,9 +87,10 @@ def _outcome(status, lid="uksi/1901/9", **kw):
 def test_the_quick_lookup_worker_is_not_offered_the_whole_text(rm):
     names = [t["function"]["name"] for t in get_worker_tools(rm, "conversational")]
     assert GLT not in names
-    # Everything else the research type offers is still offered.
+    # Everything else the research type offers is still offered (P3.34:
+    # `find_definitions` is withheld too).
     assert names == [t["function"]["name"] for t in get_worker_tools(rm) if
-                     t["function"]["name"] != GLT]
+                     t["function"]["name"] not in QUICK_LOOKUP_WITHHELD_TOOLS]
     assert LOOKUP_TOOL in names and "search_legislation_sections" in names
 
 

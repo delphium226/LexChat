@@ -69,7 +69,11 @@ __all__ = [
 # Rounds, not calls: see the module docstring. Decided with the user at
 # Session 15 from the distribution above.
 LEGISLATION_SEARCH_ROUNDS = 8
-LEGISLATION_DISCOVERY_TOOLS = frozenset({"search_legislation"})
+# P3.34: `find_definitions` is a search of the whole index too, so a round in
+# which it runs is charged like a `search_legislation` round, and once the
+# rounds are spent it is refused with the same stop (`legislation_stop_message`
+# names it when it is the call refused).
+LEGISLATION_DISCOVERY_TOOLS = frozenset({"search_legislation", "find_definitions"})
 _LEGISLATION_MODES = ("legislation_only", "legislation_and_case_law")
 
 # P3.1: rounds of `search_legislation_sections` on ONE instrument, per worker
@@ -159,7 +163,7 @@ def legislation_budget_blocks(budget: Optional[dict], name: str) -> bool:
         return False
 
 
-def legislation_stop_message(budget: Optional[dict]) -> str:
+def legislation_stop_message(budget: Optional[dict], name: str = "search_legislation") -> str:
     """The tool result a blocked `search_legislation` call returns.
 
     **Not the parliamentary message.** That one says *"if no results were found
@@ -174,6 +178,10 @@ def legislation_stop_message(budget: Optional[dict]) -> str:
         limit = int((budget or {}).get("limit") or LEGISLATION_SEARCH_ROUNDS)
     except (TypeError, ValueError):
         limit = LEGISLATION_SEARCH_ROUNDS
+    # P3.34: a refused `find_definitions` is named as the call refused; a
+    # refused `search_legislation` gets exactly the message it always got.
+    again = ("search_legislation or find_definitions" if name == "find_definitions"
+             else "search_legislation")
     return json.dumps({
         "notice": (
             "Search limit reached: this research step has already searched the "
@@ -182,7 +190,7 @@ def legislation_stop_message(budget: Optional[dict]) -> str:
         ),
         "searched": False,
         "instruction": (
-            "Do not call search_legislation again in this step. Work from the "
+            f"Do not call {again} again in this step. Work from the "
             "instruments your earlier searches returned: retrieve what you need "
             "with search_legislation_sections, get_legislation_text or "
             "get_legislation_changes, then write your report. Anything you have "

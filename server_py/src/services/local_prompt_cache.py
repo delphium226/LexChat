@@ -65,6 +65,11 @@ CACHEABLE_TOOLS = frozenset({
     # the content hash is of the slimmed result, so the new shape misses the
     # old rows rather than being served them.
     "get_legislation_changes",
+    # P3.34: `find_definitions` returns rows of LEX's public section index
+    # filtered in code, and the cache never engages on it: its result is
+    # never summarised (`run_worker_tool`). Admitted so the allowlist covers
+    # every phase-classified tool, as the test pinning this list requires.
+    "find_definitions",
     # Case law (Find Case Law)
     "search_case_law", "get_case_law_text",
     # Scottish Parliament (Official Report / TWFY / bills API)

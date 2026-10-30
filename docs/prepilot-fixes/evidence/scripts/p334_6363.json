@@ -1,0 +1,12 @@
+{
+  "session_id": "p334_6363",
+  "base": "6363",
+  "note": "P3.34 acceptance: session 6363's turn 1 only, in Deep Research under 'legislation_and_case_law', as every stored 6363 replay ran it. Graded by hand: the bare-term definer the stored runs found (1 of 1) is cited, and no instrument is named as defining the term unless its retrieved text does. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 1,
+      "research_mode": "legislation_and_case_law",
+      "chat_mode": "deep_research"
+    }
+  ]
+}

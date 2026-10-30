@@ -1,0 +1,12 @@
+{
+  "session_id": "p334_6413",
+  "base": "6413",
+  "note": "P3.34 control (batch 12 F: a borrowed definition followed into another instrument): session 6413's turn 1, in Deep Research under 'legislation_only' (the session's mode; the export's per-turn chat mode reads conversational, under which the tool is not offered and the control would be a no-op). Pass: the borrowed definition is still followed into the instrument it is borrowed from. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 1,
+      "research_mode": "legislation_only",
+      "chat_mode": "deep_research"
+    }
+  ]
+}

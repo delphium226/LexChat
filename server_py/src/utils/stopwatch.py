@@ -5,6 +5,8 @@ _PHASE1_SEARCH_TOOLS = frozenset({
     "search_scottish_parliament", "search_scottish_committee_transcripts",
     "search_scottish_plenary", "search_bills",
     "search_hansard",
+    # P3.34: a search of the whole index for where a term is defined.
+    "find_definitions",
 })
 _PHASE2_RETRIEVAL_TOOLS = frozenset({
     "search_legislation_sections", "get_legislation_text", "get_case_law_text",
