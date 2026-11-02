@@ -139,6 +139,8 @@ def test_the_detector_finds_a_literal(text, want):
     "Which of them set the £300 grant?",                             # an amount, not a literal
     "Which of them set a rate in £ per week?",                       # no symbol word, no cue
     "Where is 'carer' defined in these regulations?",                # P3.34's question
+    "Which of these regulations include a definition of 'carer'?",   # P3.34's, with a cue word
+    "Which of them include a £300 grant?",                           # an amount, with a cue word
     "Which instruments were made under 'section 95'?",               # a provision
     "Instruments made using 'the Social Security (Scotland) Act 2018'",  # a title
     "Which concern Carer's Allowance and the carers' premium?",      # apostrophes, not quotes
