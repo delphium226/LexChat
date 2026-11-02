@@ -19,6 +19,7 @@ from ..prompts import (
     get_manager_system_prompt,
     get_planner_system_prompt,
     get_worker_system_prompt,
+    quick_lookup_filter_note,
 )
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import (
@@ -245,10 +246,14 @@ async def run_worker_agent(
     # P3.52 (c): the lawyer's latest message after the brief, in the Worker's
     # message only. The log line above and the audit keep the brief as the
     # Manager wrote it; so does every other reader of `query` below.
+    # P3.14: then, for the quick-lookup Worker only, the research filters that
+    # can exclude something (its system prompt never carries the filter block;
+    # see `prompts.quick_lookup_filter_note` for why the note is here).
     messages = [
         {"role": "system", "content": get_worker_system_prompt(research_mode, cfg)},
         {"role": "user", "content": with_lawyer_words(
-            query, cfg.get("_cache_key_query"), research_mode, cfg.get("_chat_mode"))},
+            query, cfg.get("_cache_key_query"), research_mode, cfg.get("_chat_mode"))
+            + quick_lookup_filter_note(research_mode, cfg)},
     ]
 
     # P3.25: the quick-lookup Worker's list omits `get_legislation_text`.
