@@ -34,7 +34,6 @@ from ..utils.instrument_lookup import (
     section_search_lookup,
 )
 from ..utils.lawyer_words import with_lawyer_words
-from ..utils.question_sections import question_query
 from ..utils.made_under import prune_section_family_entries
 from ..utils.revocation_marks import mark_revoked_instruments
 from ..utils.made_under_answer import list_made_under_for_answer
@@ -301,9 +300,8 @@ async def run_worker_agent(
     # code lookup after an empty section search reuses one rather than repeat it.
     lookup_results: dict = {}
 
-    async def _run_tool(name: str, args: dict, result_suffix: str = "",
-                        question_sections_query: str = "") -> str:
-        out = await _run_tool_inner(name, args, result_suffix, question_sections_query)
+    async def _run_tool(name: str, args: dict, result_suffix: str = "") -> str:
+        out = await _run_tool_inner(name, args, result_suffix)
         if name == LOOKUP_TOOL:
             got = parse_lookup_result(out)
             if got and got.get("legislation_id") and got.get("title"):
@@ -320,8 +318,7 @@ async def run_worker_agent(
         return await empty_section_lookup(args, empty_lookups, _run_tool, log=search_log,
                                           seen=lookup_results)
 
-    async def _run_tool_inner(name: str, args: dict, result_suffix: str = "",
-                              question_sections_query: str = "") -> str:
+    async def _run_tool_inner(name: str, args: dict, result_suffix: str = "") -> str:
         out = await run_worker_tool(
             name, args, query, summarise_chunk_fn, summarise_model,
             parent_on_chunk=parent_on_chunk,
@@ -338,7 +335,6 @@ async def run_worker_agent(
             result_suffix=result_suffix,
             provision_fetches=provision_fetches,
             empty_search_lookup=_empty_search_lookup,
-            question_sections_query=question_sections_query,
         )
         handed_paras.extend(handed_paragraphs(out))
         # P3.50 (A1): the court's own limits this Worker was handed, read back
@@ -352,16 +348,6 @@ async def run_worker_agent(
     # code, so each is looked up once.
     section_lookups: set = set()
 
-    # P3.52 Fix 1: the lawyer's own words, for the code section searches
-    # after this run's FIRST `search_legislation` (quick-lookup Worker,
-    # legislation research types; "" elsewhere, and once spent). Claimed
-    # before any await, so of the searches one round starts, the first
-    # created is the one that carries it.
-    question_sections_pending = [
-        question_query(cfg.get("_cache_key_query"), research_mode, cfg.get("_chat_mode"))
-        if quick_lookup else ""
-    ]
-
     async def worker_tool_executor(name: str, args: dict) -> str:
         if not quick_lookup:
             return await _run_tool(name, args)
@@ -371,9 +357,6 @@ async def run_worker_agent(
         if name in QUICK_LOOKUP_WITHHELD_TOOLS:
             logger.info(f"[Worker] '{name}' is not offered in quick-lookup mode — not run")
             return withheld_tool_result(name)
-        if name == "search_legislation":
-            q, question_sections_pending[0] = question_sections_pending[0], ""
-            return await _run_tool(name, args, question_sections_query=q)
         # P3.25. Before searching within a statutory instrument, look it up
         # once, so its recital (P2.3's permitted branch) and `valid_date`
         # still have a source now that the whole text does not. Fail-soft
