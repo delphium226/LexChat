@@ -174,3 +174,188 @@ def test_detect_appeal_skips_results_without_url():
         {"title": "Coulthard v SSEFRA", "ncn": "[2025] EWCA Civ 1671", "court": "EWCA", "url": ""},
     ]
     assert detect_appellate_decisions(results) == []
+
+
+# --- P3.29: the appeal detector links one litigation, not one shared word ------
+#
+# Over every stored result set and batch 8 C's re-run, 211 of the 317 distinct
+# appeals the old rule flagged were unrelated cases sharing one word (a place,
+# "county", "holdings", a first name). Real titles from those sets.
+
+_TNA = "https://caselaw.nationalarchives.gov.uk/"
+
+
+def _d(title, path, date):
+    """A feed row as the live parser returns it: ncn/court blank, court in the URL."""
+    return {"title": title, "ncn": "", "court": "", "url": _TNA + path, "date": date}
+
+
+def _flagged(results):
+    return [a["url"].replace(_TNA, "") for a in detect_appellate_decisions(results)]
+
+
+def test_p329_genuine_appeal_with_dates_is_kept():
+    results = [
+        _d("Sophie Coulthard & Anor, R (on the application of) v Secretary of State for the "
+           "Environment, Food and Rural Affairs", "ewhc/admin/2024/3252", "2024-12-17"),
+        _d("Sophie Coulthard & Anor, R (on the application of) v Secretary of State for the "
+           "Environment, Food and Rural Affairs", "ewca/civ/2025/1671", "2025-12-19"),
+    ]
+    assert _flagged(results) == ["ewca/civ/2025/1671"]
+
+
+def test_p329_shared_place_word_is_not_a_link():
+    # "borough" and "county" are the vocabulary of party names, not a party.
+    results = [
+        _d("Cheshire East Borough Council v Secretary of State for Communities and Local "
+           "Government", "ewhc/admin/2015/410", "2015-02-25"),
+        _d("Wigan Borough Council v Scullindale Global Ltd & Ors", "ewhc/ch/2021/779", "2021-04-01"),
+        _d("Kay & Ors v London Borough of Lambeth & Anor", "ewca/civ/2017/926", "2017-07-20"),
+        _d("Hampshire County Council v Secretary of State for Environment, Food and Rural "
+           "Affairs", "ewhc/admin/2020/959", "2020-04-23"),
+        _d("Powys County Council v Price & Anor", "ewca/civ/2021/1133", "2021-07-27"),
+    ]
+    assert _flagged(results) == []
+
+
+def test_p329_two_shared_local_government_words_are_not_a_link():
+    # "London" and "Borough" are two shared words, and an anonymised claimant
+    # ("AAM") has no name word to differ on: only the vocabulary list stops it.
+    results = [
+        _d("AAM, R (on the application of) v London Borough of Bromley", "ewhc/admin/2025/1565",
+           "2025-06-23"),
+        _d("Haneen Abdelrahman v The Mayor and Burgesses of the London Borough of Islington",
+           "ewca/civ/2025/1038", "2025-07-31"),
+    ]
+    assert _flagged(results) == []
+
+
+def test_p329_lower_judgment_decided_after_the_appeal_is_not_its_appeal():
+    # The same parties at two levels, but the "judgment under appeal" is later.
+    results = [
+        _d("Kanwarjit Singh Juj v John Lewis Partnership Plc", "ewca/civ/2023/1507", "2023-12-21"),
+        _d("Kanwarjit Singh Juj v John Lewis Partnership Plc", "ewhc/kb/2024/2418", "2024-09-30"),
+    ]
+    assert _flagged(results) == []
+    results[1]["date"] = "2022-09-30"
+    assert _flagged(results) == ["ewca/civ/2023/1507"]
+
+
+def test_p329_appeal_more_than_six_years_on_is_not_linked():
+    results = [
+        _d("Barclay & Ors, R (on the application of) v Secretary of State for Justice & Ors",
+           "ewca/civ/2016/1319", "2016-12-02"),
+        _d("Barclay & Anor, R (on the application of) v Secretary of State for Justice & Ors",
+           "ewhc/admin/2008/1183", "2008-05-09"),
+    ]
+    assert _flagged(results) == []
+    results[1]["date"] = "2011-05-09"
+    assert _flagged(results) == ["ewca/civ/2016/1319"]
+
+
+def test_p329_missing_date_is_not_refused_on_the_date():
+    results = [
+        _d("Jones v Cleanthi", "ewhc/qb/2005/2646", ""),
+        _d("Jones v Cleanthi", "ewca/civ/2006/1712", "2006-12-12"),
+    ]
+    assert _flagged(results) == ["ewca/civ/2006/1712"]
+
+
+def test_p329_one_shared_surname_needs_the_other_party_to_agree():
+    # Berezovsky v Hine is not the appeal of Berezovsky v Abramovich ...
+    results = [
+        _d("Berezovsky v Abramovich", "ewhc/comm/2011/1143", "2011-05-06"),
+        _d("Berezovsky v Hine & Ors", "ewca/civ/2011/1089", "2011-10-07"),
+    ]
+    assert _flagged(results) == []
+    # ... but SSWP v Payne is the appeal of Payne v SSWP (the parties swapped).
+    results = [
+        _d("Payne & Anor, R (on the application of) v Secretary of State for Work and Pensions",
+           "ewhc/admin/2010/2162", "2010-07-26"),
+        _d("Secretary of State for Work & Pensions v Payne & Anor", "ewca/civ/2010/1431",
+           "2010-12-14"),
+    ]
+    assert _flagged(results) == ["ewca/civ/2010/1431"]
+
+
+def test_p329_first_name_is_not_a_link():
+    results = [
+        _d("Paul Birch v Paula Brookfield & Ors", "ewhc/comm/2025/732", "2025-03-27"),
+        _d("Paul Morgan Evans & Anor v Swansea Building Society", "ewca/civ/2026/978",
+           "2026-07-28"),
+    ]
+    assert _flagged(results) == []
+
+
+def test_p329_two_shared_words_with_the_other_party_named_differently():
+    results = [
+        _d("Dan Cornel Nistor & Anor v Union of Shop, Distributive and Allied Workers (USDAW)",
+           "ewhc/kb/2024/1165", "2024-05-16"),
+        _d("Tesco Stores Ltd v Union of Shop, Distributive and Allied Workers and others",
+           "uksc/2024/28", "2024-09-12"),
+    ]
+    assert _flagged(results) == []
+    results.append(_d("THE UNION OF SHOP, DISTRIBUTIVE AND ALLIED WORKERS v TESCO STORES "
+                      "LIMITED", "ewhc/qb/2022/201", "2022-02-03"))
+    assert _flagged(results) == ["uksc/2024/28"]
+
+
+def test_p329_valuation_officer_name_against_different_ratepayers():
+    # A valuation officer's name is in unrelated appeals against the same office ...
+    results = [
+        _d("Michael Stanuszek v Dawn Bunyan (Listing Officer)", "ewhc/admin/2025/255",
+           "2025-02-07"),
+        _d("Dawn Bunyan (Valuation Officer) v Fridays Limited", "ewca/civ/2025/666",
+           "2025-05-22"),
+    ]
+    assert _flagged(results) == []
+    # ... and the ratepayer, with the officer on the other side, still links.
+    results = [
+        _d("S & J Monk v Keith Newbigin (VO)", "ukut/lc/2014/14", "2014-02-26"),
+        _d("Newbigin (Valuation Officer) v S J & J Monk (a firm)", "ewca/civ/2015/78",
+           "2015-02-13"),
+    ]
+    assert _flagged(results) == ["ewca/civ/2015/78"]
+
+
+def test_p329_criminal_division_and_privy_council_are_never_flagged():
+    results = [
+        _d("Prospect v Andrew Evans", "ewhc/kb/2025/499", "2025-03-10"),
+        _d("Andrew Evans v R", "ewca/crim/2025/1150", "2025-09-05"),
+        _d("Bank of Scotland v Hussain & Anor", "ewhc/ch/2022/2812", "2022-11-05"),
+        _d("Hussain v Bank of Scotland (Jersey)", "ukpc/2023/12", "2023-03-22"),
+    ]
+    assert _flagged(results) == []
+
+
+def test_p329_same_two_parties_with_generic_names_link():
+    results = [
+        _d("British Telecommunications Plc, R (on the application of) v Her Majesty's Treasury",
+           "ewhc/admin/2018/3251", "2018-11-28"),
+        _d("British Telecommunications PLC, R (On the Application Of) v Treasury",
+           "ewca/civ/2020/1", "2020-01-21"),
+    ]
+    assert _flagged(results) == ["ewca/civ/2020/1"]
+
+
+def test_p329_two_letter_initials_against_one_department_are_not_a_link():
+    results = [
+        _d("AM, R (on the application of) v Secretary of State for the Home Department",
+           "ewhc/admin/2022/2591", "2022-10-14"),
+        _d("R (on the application of AM (Belarus)) v Secretary of State for the Home Department",
+           "uksc/2024/13", "2024-04-24"),
+    ]
+    assert _flagged(results) == []
+
+
+def test_p329_frequent_surname_in_the_set_still_links():
+    # The old rule dropped a word in more than three results, so a litigant with
+    # several judgments in one set ("Evans") was never linked.
+    results = [
+        _d("Evans v First Secretary of State & Anor", "ewhc/admin/2003/2169", "2003-09-08"),
+        _d("Evans v Barclays Bank Plc", "ewhc/ch/2020/1", "2020-01-01"),
+        _d("Avon Estates Ltd v Evans & Anor", "ewhc/ch/2013/1635", "2013-06-13"),
+        _d("Stuart William Evans & Ors v JNP Group", "ewhc/comm/2026/2175", "2026-08-14"),
+        _d("Evans v First Secretary of State & Ors", "ewca/civ/2003/1523", "2003-11-05"),
+    ]
+    assert _flagged(results) == ["ewca/civ/2003/1523"]

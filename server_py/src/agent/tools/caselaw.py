@@ -2,6 +2,7 @@
 
 import re
 import xml.etree.ElementTree as ET
+from functools import lru_cache
 from typing import Optional
 
 import httpx
@@ -79,48 +80,263 @@ def _party_tokens(title: str) -> set[str]:
     return {t for t in toks if t not in _PARTY_STOPWORDS}
 
 
+# P3.29: the detector linked a case and its "appeal" on ANY one shared party word
+# outside the stopword list, so a place, "county", "holdings" or a first name
+# linked unrelated cases: over every stored result set and batch 8 C's re-run
+# (748 distinct sets), 106 of the 317 distinct appeals it flagged were the same
+# litigation at two levels, read by hand (evidence/seam/s52/p329). Three checks
+# now stand between a shared word and a link (after: 105 of 107):
+#
+# 1. The words. `_APPEAL_NAME_NOISE` is the generic vocabulary of party names in
+#    the corpus: places and local-government words, corporate forms, and the
+#    procedural and institutional words, read off the most frequent title words of
+#    every stored result. It is the appeal detector's own list:
+#    `_PARTY_STOPWORDS` also feeds P3.46's named-case note, which is unchanged.
+# 2. The parties. One shared name word is enough only where the OTHER party
+#    agrees too ("Payne v SSWP" and "SSWP v Payne"; "Smith v RBS" and "Karen
+#    Smith v The RBS"), so "Berezovsky v Hine" is not the appeal of "Berezovsky v
+#    Abramovich" and "R (Best) v SSJ" not that of "Best v Chief Land Registrar".
+#    Two shared name words are enough unless the other parties are named
+#    differently ("Tesco v USDAW" and "Nistor v USDAW"; "Dawn Bunyan (Valuation
+#    Officer) v Fridays" and "Stanuszek v Dawn Bunyan (Listing Officer)"). A title whose every name
+#    word is generic ("British Telecommunications plc v HM Treasury") links on
+#    the same two parties, never on two-letter initials alone ("AM v SSHD").
+#    Lost by this, read: an appeal whose respondent was a co-defendant below
+#    ("Woodland v Essex CC" from "Woodland v Swimming Teachers' Association & Ors").
+# 3. The dates and the court. An appeal is decided after the judgment under
+#    appeal and within `_APPEAL_MAX_GAP_DAYS` of it; a result whose date is missing
+#    is not refused on the date. The Court of Appeal (Criminal Division) and the
+#    Privy Council hear no appeal from a court the feed lists, so neither is
+#    flagged.
+#
+# The set-frequency filter (a word in more than three results was dropped) is
+# gone: it removed the surname of a litigant with several judgments in one set
+# ("Evans v First Secretary of State") while keeping "county".
+_APPEAL_NAME_NOISE = frozenset({
+    # places and local government
+    "london", "borough", "boroughs", "city", "county", "district", "metropolitan",
+    "north", "south", "east", "west", "northern", "southern", "eastern", "western",
+    "royal", "parish", "mayor", "burgesses", "commonalty", "commonality", "citizens",
+    "scotland", "scottish", "england", "english", "wales", "welsh", "ireland",
+    "irish", "britain", "british", "great", "greater", "europe", "european",
+    "international", "global", "central", "upon", "local", "community",
+    # corporate forms and common business words
+    "group", "holdings", "holding", "bank", "banking", "finance", "financial",
+    "capital", "investments", "investment", "properties", "property", "estates",
+    "estate", "homes", "partners", "partnership", "management", "corporation",
+    "corporate", "insurance", "assurance", "trading", "commercial", "developments",
+    "construction", "solutions", "enterprises", "ventures", "industries",
+    "industrial", "energy", "water", "utilities", "infrastructure",
+    "telecommunications", "networks", "network", "markets", "centre", "center",
+    "house", "land", "park", "parks", "street", "road", "square", "gardens",
+    "foundation", "association", "society", "institute", "university", "college",
+    "school", "club", "union", "alliance", "fund", "scheme", "pension", "firm",
+    "stores", "shop", "retail", "hotels", "logistics", "technology", "resources",
+    "engineering", "airways", "maritime", "rail", "mutual", "opportunities",
+    # procedural and institutional words
+    "anor", "matter", "information", "court", "courts", "crown", "magistrates",
+    "sitting", "tribunal", "chamber", "first", "tier", "entitlement", "social",
+    "officer", "officers", "valuation", "listing", "registrar", "solicitors",
+    "regulation", "regulatory", "commission", "ministry", "cabinet", "exchequer",
+    "lord", "lords", "queen", "king", "public", "criminal", "civil", "legal",
+    "judicial", "review", "rights", "child", "children", "mother", "father",
+    "persons", "unknown", "claimants", "deceased", "liquidation", "administration",
+    "insolvency", "joint", "liquidators", "administrators", "receiver", "official",
+    "trustees", "trustee", "formerly", "known", "behalf", "representative", "hmrc",
+    "inland", "excise", "conduct", "security", "protection", "independent",
+    "natural", "hospital", "hospitals", "healthcare", "constabulary", "workers",
+    "action", "litigation", "strategy", "consulting", "generation", "contract",
+    "contracts", "climate", "change",
+})
+
+# Six years: the longest gap between a judgment and its appeal among the
+# genuine pairs read was 3.3 years (EWHC to UKSC); a chain through the Court of
+# Appeal can take longer.
+_APPEAL_MAX_GAP_DAYS = 6 * 365 + 2
+
+# Words of an opposing party that do not identify it.
+_SIDE_JOINERS = frozenset({
+    "the", "of", "for", "and", "on", "in", "at", "to", "by", "as", "an", "re", "ex",
+    "parte", "application", "anor", "ors", "others", "another", "ltd", "limited",
+    "plc", "llp", "inc", "rev", "trading",
+})
+
+
+@lru_cache(maxsize=4096)
+def _title_parts(title: str) -> tuple[str, ...]:
+    """Each party of a title, lower-cased ("X v Y" gives two; a title with no
+    "v", such as "Re X", gives one)."""
+    return tuple(re.split(r"\s+v\.?\s+", (title or "").lower())[:2])
+
+
+@lru_cache(maxsize=4096)
+def _appeal_name_tokens(title: str) -> frozenset[str]:
+    """Party-name words that can identify a litigant: `_party_tokens` less the
+    corpus's generic party-name vocabulary."""
+    return frozenset(_party_tokens(title) - _APPEAL_NAME_NOISE)
+
+
+@lru_cache(maxsize=4096)
+def _title_sides(title: str) -> tuple[frozenset[str], ...]:
+    """The words of each party in a title, less joiners and corporate suffixes."""
+    return tuple(frozenset(w for w in re.findall(r"[a-z]{2,}", p) if w not in _SIDE_JOINERS)
+                 for p in _title_parts(title))
+
+
+def _word_hit(w: str, other: set[str]) -> bool:
+    """A word is on the other side when it is there, or matches a word it begins
+    or that begins it (four letters or more: "work"/"works", "syke"/"sykes")."""
+    return any(w == o or (min(len(w), len(o)) >= 4 and (w.startswith(o) or o.startswith(w)))
+               for o in other)
+
+
+def _words_agree(a: set[str], b: set[str]) -> bool:
+    """Two parties' words agree when more than half the shorter side's words are
+    on the other side."""
+    if not a or not b:
+        return False
+    small, big = (a, b) if len(a) <= len(b) else (b, a)
+    return sum(1 for w in small if _word_hit(w, big)) * 2 > len(small)
+
+
+def _other_parties_agree(hi_title: str, lo_title: str, token: str) -> bool:
+    """For one shared name word: the party it names in each title, and the
+    OTHER party in each title agrees. A title with one party only cannot be
+    checked and does not agree."""
+    hs, ls = _title_sides(hi_title), _title_sides(lo_title)
+    if len(hs) < 2 or len(ls) < 2:
+        return False
+    hi_idx = [i for i, s in enumerate(hs) if token in s]
+    lo_idx = [i for i, s in enumerate(ls) if token in s]
+    return any(_words_agree(hs[1 - i], ls[1 - j]) for i in hi_idx for j in lo_idx)
+
+
+def _identifies(a: set[str], b: set[str]) -> bool:
+    """The words two agreeing parties share name somebody: a word of three
+    letters or more that is not a government office or court word. Two-letter
+    initials ("AM v SSHD", "MM v SSHD") are shared by unrelated anonymised
+    claimants against the same department."""
+    return any(len(w) >= 3 and w not in _PARTY_STOPWORDS and _word_hit(w, b) for w in a)
+
+
+def _same_parties(hi_title: str, lo_title: str) -> bool:
+    """Both parties of two-party titles agree, in either order (the claimant may
+    be the respondent on appeal), and their shared words name somebody: the
+    route for a title whose every name word is generic ("British
+    Telecommunications plc v HM Treasury")."""
+    hs, ls = _title_sides(hi_title), _title_sides(lo_title)
+    if len(hs) < 2 or len(ls) < 2:
+        return False
+    for a0, a1, b0, b1 in ((hs[0], hs[1], ls[0], ls[1]), (hs[0], hs[1], ls[1], ls[0])):
+        if (_words_agree(a0, b0) and _words_agree(a1, b1)
+                and (_identifies(a0, b0) or _identifies(a1, b1))):
+            return True
+    return False
+
+
+def _other_parties_differ(hi_title: str, lo_title: str, shared: set[str]) -> bool:
+    """The shared words name one party in each title, and the OTHER parties are
+    named differently: each has a name word, they share none and their words do
+    not agree ("Tesco v USDAW" and "Nistor v USDAW"). A generic other party
+    ("Secretary of State ... & Ors") never differs."""
+    hp, lp = _title_parts(hi_title), _title_parts(lo_title)
+    if len(hp) < 2 or len(lp) < 2:
+        return False
+    hs, ls = _title_sides(hi_title), _title_sides(lo_title)
+    hi_idx = [i for i, s in enumerate(hs) if s & shared]
+    lo_idx = [i for i, s in enumerate(ls) if s & shared]
+    if not hi_idx or not lo_idx:
+        return False
+    for i in hi_idx:
+        for j in lo_idx:
+            a = _appeal_name_tokens(hp[1 - i])
+            b = _appeal_name_tokens(lp[1 - j])
+            if not a or not b or a & b or _words_agree(hs[1 - i], ls[1 - j]):
+                return False
+    return True
+
+
+def _names_match(hi_title: str, lo_title: str) -> bool:
+    """The same litigation by its names: two shared name words, the other
+    parties not named differently; one, with the other party agreeing; or the
+    same two parties."""
+    shared = _appeal_name_tokens(hi_title) & _appeal_name_tokens(lo_title)
+    if len(shared) >= 2 and not _other_parties_differ(hi_title, lo_title, shared):
+        return True
+    if any(_other_parties_agree(hi_title, lo_title, t) for t in shared):
+        return True
+    return _same_parties(hi_title, lo_title)
+
+
+def _decision_date(r: dict):
+    from datetime import date
+    try:
+        return date.fromisoformat(str(r.get("date") or "")[:10])
+    except ValueError:
+        return None
+
+
+def _hears_no_listed_appeal(r: dict) -> bool:
+    """The Court of Appeal (Criminal Division) hears appeals from the Crown Court
+    and the Privy Council from overseas courts: neither is the appeal of a
+    judgment the feed lists."""
+    text = f"{r.get('ncn', '')} {r.get('court', '')} {r.get('url', '')}".upper()
+    return "EWCA CRIM" in text or "EWCA/CRIM" in text or "UKPC" in text
+
+
+def _dates_allow_appeal(hi: dict, lo: dict) -> bool:
+    hd, ld = _decision_date(hi), _decision_date(lo)
+    if hd is None or ld is None:
+        return True
+    return 0 <= (hd - ld).days <= _APPEAL_MAX_GAP_DAYS
+
+
+def _appeal_pairs(results: list[dict]) -> list[tuple[dict, dict]]:
+    """Every (appeal, judgment under appeal) pair in a result set, appeals in
+    input order: a higher-court result (Court of Appeal, Inner House, Supreme
+    Court) and a lower-court result naming the same litigant, decided in an
+    order and within a time an appeal allows (P3.29, above)."""
+    enriched = []
+    for r in results:
+        if not isinstance(r, dict) or not r.get("url"):
+            continue
+        enriched.append({
+            "r": r,
+            "rank": _court_rank(r.get("ncn", ""), r.get("court", ""), r.get("url", "")),
+            "title": r.get("title", "") or "",
+        })
+    out: list[tuple[dict, dict]] = []
+    for hi in enriched:
+        if hi["rank"] < 3 or _hears_no_listed_appeal(hi["r"]):
+            continue
+        for lo in enriched:
+            if lo is hi or lo["rank"] == 0 or lo["rank"] >= hi["rank"]:
+                continue
+            if not _dates_allow_appeal(hi["r"], lo["r"]):
+                continue
+            if _names_match(hi["title"], lo["title"]):
+                out.append((hi["r"], lo["r"]))
+    return out
+
+
 def detect_appellate_decisions(results: list[dict]) -> list[dict]:
     """Find search results that are the appellate decision of another result in the set.
 
     Retrieving a case's appeal is otherwise search luck: when both the first-instance
     judgment and its appeal appear in the same result set, the model may cite only the
-    lower court. This flags each higher-court result (EWCA/UKSC etc.) that shares a
-    distinctive party name with a lower-court result, so the caller can nudge the model
-    to retrieve the appellate decision. Returns the appellate results in input order.
+    lower court. This flags each higher-court result (EWCA/UKSC etc.) that is the
+    appeal of a lower-court result in the set (`_appeal_pairs`: the same litigant,
+    the dates in an appeal's order, a court that hears such an appeal), so the
+    caller can nudge the model to retrieve the appellate decision. Returns the
+    appellate results in input order, each once.
     """
-    enriched = []
-    for r in results:
-        if not r.get("url"):
-            continue
-        enriched.append({
-            "r": r,
-            "rank": _court_rank(r.get("ncn", ""), r.get("court", ""), r.get("url", "")),
-            "tokens": _party_tokens(r.get("title", "")),
-        })
-
-    # How many results each token appears in — a party surname is rare (the case and
-    # its appeal); common words that slip through the stopword list are not distinctive.
-    freq: dict[str, int] = {}
-    for e in enriched:
-        for t in e["tokens"]:
-            freq[t] = freq.get(t, 0) + 1
-
     appellate: list[dict] = []
     seen_urls: set[str] = set()
-    for hi in enriched:
-        if hi["rank"] < 3:  # only nudge toward genuinely appellate courts
+    for hi, _lo in _appeal_pairs(results):
+        if hi["url"] in seen_urls:
             continue
-        url = hi["r"]["url"]
-        if url in seen_urls:
-            continue
-        for lo in enriched:
-            if lo is hi or lo["rank"] == 0 or lo["rank"] >= hi["rank"]:
-                continue
-            shared = {t for t in (hi["tokens"] & lo["tokens"]) if freq[t] <= 3}
-            if shared:
-                appellate.append(hi["r"])
-                seen_urls.add(url)
-                break
+        seen_urls.add(hi["url"])
+        appellate.append(hi)
     return appellate
 
 
