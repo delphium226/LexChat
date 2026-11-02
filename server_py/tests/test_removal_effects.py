@@ -429,3 +429,76 @@ def test_the_new_sentences_trip_nothing_the_old_one_did_not():
     limb = ss._currency_limb(_log(_rec({"omitted": 1})))
     whole = limb[limb.index(M_WHOLE) - 1:].split(" So in the Jurisdiction")[0]
     assert _trips(whole) == _trips(OLD_MANAGER) == ["negcurrency:no_longer"]
+
+
+# ---------------------------------------------------------------------------
+# the Worker prompts' `_IN_FORCE_RULE` (b) (F2, the user-approved wording)
+# ---------------------------------------------------------------------------
+
+RULE_B_OLD = ("  (b) a repeal or revocation relation from `get_legislation_changes` — that "
+              "named provision is no longer in force.")
+RULE_B = ("  (b) a removal from `get_legislation_changes` whose group is marked "
+          "`removal: provision` or `removal: provision_in_part` — that named provision, or "
+          "the part removed, is no longer in force. A group marked `removal: words_only` "
+          "amends the provision's text and does not remove the provision; one marked "
+          "`removal: qualified` may be stated only with its `qualifier`.")
+
+
+def _rule_b():
+    from src import prompts
+    rule = prompts._IN_FORCE_RULE
+    start = rule.index("\n  (b) ") + 1
+    return rule[start:rule.index("\n  (c) ")]
+
+
+def test_rule_b_is_the_approved_wording_in_exactly_the_worker_prompts_with_the_rule():
+    """The approved clause, and the old one nowhere: it said any repeal or
+    revocation relation put the provision out of force, against the change-record
+    block's words-only and qualified sentences."""
+    from src import prompts
+    assert _rule_b() == RULE_B
+    carriers = {name for name, v in vars(prompts).items()
+                if isinstance(v, str) and RULE_B in v and name != "_IN_FORCE_RULE"}
+    assert carriers == {"WORKER_SYSTEM_PROMPT", "WORKER_SYSTEM_PROMPT_HYBRID",
+                        "WORKER_SYSTEM_PROMPT_CONVERSATIONAL"}
+    assert not [name for name, v in vars(prompts).items()
+                if isinstance(v, str) and RULE_B_OLD in v]
+    for rm, cm in (("legislation_only", "research"), ("legislation_and_case_law", None),
+                   ("legislation_only", "conversational")):
+        cfg = {"_chat_mode": cm} if cm else None
+        assert RULE_B in prompts.get_worker_system_prompt(rm, cfg)
+
+
+def test_rule_b_cites_exactly_the_markers_the_change_record_emits():
+    """Every `removal: X` the clause names is a value the slimmer writes on a
+    removal group, and every value it writes is named; `qualifier` is the key it
+    writes beside a qualified one. A renamed marker on either side fails here."""
+    import re
+    cited = set(re.findall(r"`removal: (\w+)`", _rule_b()))
+    slim = _slim()
+    emitted = {g["removal"] for g in slim["related"] if "removal" in g}
+    assert cited == emitted == {PROVISION, PROVISION_IN_PART, WORDS_ONLY, QUALIFIED}
+    qualified = [g for g in slim["related"] if g.get("removal") == QUALIFIED]
+    assert qualified and all(g.get("qualifier") for g in qualified)
+    assert "`qualifier`" in _rule_b()
+    # The block the Worker reads beside the result names the same markers.
+    block = ss.amendment_search_note({"legislation_id": SUBJECT}, json.dumps(slim))
+    assert set(re.findall(r"`removal: (\w+)`", block)) == cited
+
+
+def test_rule_b_says_no_longer_in_force_only_of_provision_removals():
+    """As the change-record block does: "no longer in force" in the sentence
+    naming the provision classes only; the words-only and qualified sentence
+    never says it."""
+    first, rest = _rule_b().split("no longer in force.", 1)
+    assert "`removal: provision`" in first and "`removal: provision_in_part`" in first
+    assert "words_only" not in first and "qualified" not in first
+    assert "`removal: words_only`" in rest and "`removal: qualified`" in rest
+    assert "no longer in force" not in rest and "not in force" not in rest
+
+
+def test_rule_b_trips_what_the_old_clause_tripped_and_nothing_more():
+    """A Worker can echo its prompt. The new clause permits "no longer in force"
+    of a provision removal, so `negcurrency` reads it as that claim, exactly as it
+    read the clause it replaces, and no other detector fires."""
+    assert _trips(RULE_B) == _trips(RULE_B_OLD) == ["negcurrency:no_longer"]
