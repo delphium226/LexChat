@@ -88,7 +88,10 @@ function FilterPill({ label, active, onClick }) {
   );
 }
 
-export default function SourcesRail({ sources = [], activeCite, onCiteClick, collapsed = false, onCollapsedChange, isParliament = false, isWestminster = false }) {
+// P4.25: `forAnswer` says the rail belongs to an answer (App's `railTurn`), so an
+// empty list means that answer has no source of its own, not that nothing has been
+// asked yet; `onShowEarlier` opens the latest earlier answer that has sources.
+export default function SourcesRail({ sources = [], activeCite, onCiteClick, collapsed = false, onCollapsedChange, isParliament = false, isWestminster = false, forAnswer = false, onShowEarlier }) {
   const activeRef = useRef(null);
   const setCollapsed = v => onCollapsedChange?.(v);
 
@@ -147,7 +150,9 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
 
   const subtitle =
     sources.length === 0
-      ? 'No sources yet'
+      ? forAnswer
+        ? 'None for this answer'
+        : 'No sources yet'
       : hasActiveFilters
         ? `${visibleSources.length} of ${sources.length} shown`
         : secondaryCount > 0
@@ -348,7 +353,31 @@ export default function SourcesRail({ sources = [], activeCite, onCiteClick, col
             }}
           >
             <div style={{ fontSize: 30, marginBottom: 12, opacity: 0.3, lineHeight: 1 }}>⚖</div>
-            {isWestminster
+            {forAnswer ? (
+              <>
+                <div>This answer has no sources of its own.</div>
+                {onShowEarlier && (
+                  <button
+                    type="button"
+                    onClick={onShowEarlier}
+                    style={{
+                      marginTop: 12,
+                      padding: '5px 12px',
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      border: '1px solid var(--ink-300)',
+                      background: 'transparent',
+                      color: 'var(--ink-600)',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-ui)',
+                    }}
+                  >
+                    Show the earlier answer's sources
+                  </button>
+                )}
+              </>
+            ) : isWestminster
               ? 'Sources will appear here as the research agent cites Hansard debates, written statements, and bills.'
               : isParliament
                 ? 'Sources will appear here as the research agent cites Scottish Parliament debates, committee transcripts, and bills.'
