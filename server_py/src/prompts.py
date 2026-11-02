@@ -217,6 +217,15 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 # its report, `agent_core.run_worker_agent`), so this sentence states the rule
 # in terms of the record the Worker does see. Screened against every detector
 # in `test_footer_trips_no_detector`, since a Worker can echo it.
+#
+# FIX_PLAN P3.28 (F2, user-approved wording): (b) names the removal classes the
+# change record marks on each removal group (`removal`, `qualifier`, written by
+# `lex._slim_amendment_results` from `utils/removal_effects.classify_removal`).
+# It used to say that ANY repeal or revocation relation puts the provision out
+# of force, which contradicted the change-record block for "words repealed"
+# (the text amended, the provision stays) and "repealed (prosp.)" or "repealed
+# (S)" (only with the qualification). Screened: like the clause it replaced,
+# it trips `negcurrency`'s `no_longer` and nothing else.
 _COMMENCEMENT_RECORD_RULE = (
     "- (a) counts only a relation made by ANOTHER instrument (`self: false`), never a "
     "`self: true` one, which is the instrument's own commencement provision and says "
@@ -232,7 +241,7 @@ _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
 - NEVER infer currency from CASE LAW. A judgment citing, applying or discussing an Act is not evidence that the Act, or any provision of it, is in force today: courts apply the law as it stood at the material time, and a 2026 judgment on a 1998 Act says nothing about which of its provisions are commenced or repealed now. Do not write that a case "confirms" an Act's status.
 - What you MAY state, citing the source:
   (a) a `coming into force` relation from `get_legislation_changes` — that named provision was commenced by that named instrument. The relation carries no date of its own; where code added an `in_force` date to it, give that date with its qualification as the date the instrument brought the provision into force, never as its status today; otherwise, for a date, retrieve the commencing instrument and quote it. Where the entry also carries `date_still_to_come`, the date is after today's date: say the provision is due to come into force on it, never that it has been brought into force.
-  (b) a repeal or revocation relation from `get_legislation_changes` — that named provision is no longer in force.
+  (b) a removal from `get_legislation_changes` whose group is marked `removal: provision` or `removal: provision_in_part` — that named provision, or the part removed, is no longer in force. A group marked `removal: words_only` amends the provision's text and does not remove the provision; one marked `removal: qualified` may be stated only with its `qualifier`.
   (c) a repeal or revocation marker in the index's own title, e.g. "Companies Act 1967 (repealed)" — treat that instrument as repealed.
   (d) the `valid_date` on a `get_legislation_text` response — the date the held text is stated to be up to date to. Say it as that, never as a date the legislation came into force.
 - `Commencement Order` is NOT (a). Those relations are commencement orders for an amendment made to the legislation by some other Act, and the provision against them is a placeholder. Never name one as having commenced the legislation you were asked about.
