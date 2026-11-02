@@ -193,6 +193,59 @@ def halts_from(turn: dict) -> list:
     return out
 
 
+_SCAN_HEAD = "[SEARCH SCOPE — text scan by code: "
+_SCAN_ID = r"[a-z]+/\d{4}/\d+"
+
+
+def scan_entry_from_block(block: str, listed: list) -> Optional[dict]:
+    """P3.57: the scope-record entry (`literal_scan.scan_entry`'s shape) a
+    stored made-under result's text scan block recorded, read back from the
+    block, which is the only place a run file keeps it. `listed` is the ids
+    the made-under result listed, in its order. None where there is no block."""
+    from src.utils import literal_scan as ls
+
+    start = block.find(_SCAN_HEAD)
+    if start < 0 or not listed:
+        return None
+    body = block[start:]
+    m = re.search(r'instruments contain "(.+?)", and a section search', body)
+    if not m:
+        return None
+    absent_m = re.search(r"\nNot found in the text read, \d+: ([^\n]*)\.\n", body)
+    absent = re.findall(_SCAN_ID, absent_m.group(1)) if absent_m else []
+    unread_m = re.search(r"\nNot read, \d+: ([^\n]*)\.\n", body)
+    unread = [u.split(" ", 1)[0] for u in unread_m.group(1).split("; ")] if unread_m else []
+    found = [i for i in listed if i not in absent and i not in unread]
+    return {"tool": ls.SCAN_ENTRY, "literal": m.group(1), "listed": len(listed),
+            "ids": list(listed), "found": found, "absent": [i for i in listed if i in absent],
+            "unread": [i for i in listed if i in unread]}
+
+
+def scan_searches_from(turn: dict) -> list:
+    """P3.57: the made-under and text-scan entries of the turn's scope record,
+    rebuilt from each recorded `find_instruments_made_under` result that
+    carries a scan block (the record itself is not stored). [] where no
+    delegation ran a scan, so a turn without one is rebuilt as before."""
+    from src.utils.search_scope import record_made_under
+
+    out: list = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for t in dg.get("tools") or []:
+            if t.get("name") != "find_instruments_made_under":
+                continue
+            try:
+                raw = json.loads(t.get("raw_result") or "")
+            except (TypeError, ValueError):
+                continue
+            listed = [str(i.get("legislation_id")) for i in (raw.get("instruments") or [])
+                      if isinstance(i, dict) and i.get("legislation_id")]
+            entry = scan_entry_from_block(t.get("final_result") or "", listed)
+            if entry:
+                record_made_under(out, t.get("raw_result") or "")
+                out.append(entry)
+    return out
+
+
 def court_limits_from(turn: dict) -> list:
     """P3.50 (A1): the court's own limits in every judgment the turn's
     delegations read, found by the product's detector in each recorded
@@ -324,6 +377,9 @@ def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
         turn.get("question") or "", turn.get("plan") or {}, findings,
         halts_from(turn), len(findings), research_mode=research_mode,
         lost=lost_from(turn, apply_lost), court_limits=court_limits_from(turn),
+        # P3.57: the text scan's entries (and the list they scanned), so the
+        # synthesis gets P3.53's coverage note and the scan's note as sent.
+        searches=scan_searches_from(turn) or None,
     )
     if without_fix:
         messages[0]["content"] = _synthesis_prompt_at(rev, research_mode)
@@ -1538,6 +1594,11 @@ def main(argv: Optional[list] = None) -> int:
               f"; limits found in the turn's judgments: {len(_lims)}"
               + "".join(f"\n    {l.get('ncn') or l.get('url')} para {l.get('para') or '-'} "
                         f"(kind {l.get('kind')})" for l in _lims))
+        _body = messages[1]["content"]
+        print(f"  list coverage note (P3.53): "
+              f"{'present' if '[SEARCH SCOPE — list coverage' in _body else 'absent'}; "
+              f"text scan note (P3.57): "
+              f"{'present' if '[SEARCH SCOPE — text scan by code, across' in _body else 'absent'}")
     else:
         tool_msgs = [m for m in messages if m.get("role") == "tool"]
         with_outline = sum(1 for m in tool_msgs if "[SECTION OUTLINE" in (m.get("content") or ""))

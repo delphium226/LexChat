@@ -72,6 +72,7 @@ from ..utils.search_scope import (
     strip_scope_blocks,
     worker_scope_block,
 )
+from ..utils.literal_scan import scan_synthesis_note
 from ..utils.source_naming import is_legislation, named_in, token_in
 from ..utils import rail_titles
 from ..utils.rail_dedupe import collapse_scheme_duplicates
@@ -1516,7 +1517,8 @@ def _last_user_content(messages: list) -> str:
 
 
 def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
-                      earlier_reports: Optional[list] = None) -> str:
+                      earlier_reports: Optional[list] = None,
+                      earlier_searches: Optional[list] = None) -> str:
     """Build a self-contained worker brief for one approved plan step.
 
     The Worker has no access to the conversation or the rest of the plan, so the
@@ -1533,6 +1535,12 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
     recognises: the pattern missed a step that worked on the list
     (`wave4_b11_sweep`), and that step dropped an instrument. It sits before
     the CONTEXT sentence, which stays the brief's last word.
+
+    P3.57 follow-up: `earlier_searches` are the scope records of the steps
+    already run. Where one holds a text scan by code of a made-under list,
+    a sibling line after P3.10's says what it read and found, and that a
+    section search's not returning the string is not evidence against it
+    (`step_handover.scan_handover_line`). Without a scan, nothing is added.
     """
     parts = [f"RESEARCH TASK: {step['title']}"]
     detail = step.get("detail") or ""
@@ -1547,6 +1555,12 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
         line = handover_line(earlier_reports)
         if line:
             parts.append(line)
+    if earlier_searches:
+        from ..utils.step_handover import scan_handover_line
+
+        scan_line = scan_handover_line(earlier_searches)
+        if scan_line:
+            parts.append(scan_line)
     if user_query:
         parts.append(
             "CONTEXT: This task is one step of a wider research plan answering the "
@@ -1614,6 +1628,9 @@ def build_synthesis_messages(
         lost=lost,
     )
     synthesis_user += list_coverage_note(searches)
+    # P3.57 follow-up: a text scan's result stands over a step's ranked
+    # section search that did not return the string. "" without a scan.
+    synthesis_user += scan_synthesis_note(searches)
     return [
         {"role": "system", "content": get_deep_research_synthesis_prompt(research_mode)},
         {"role": "user", "content": synthesis_user},
@@ -1703,7 +1720,8 @@ async def run_deep_research(
         # P3.10: the steps already run, so a step that works on their list is
         # handed it. A lost step's content is its label and names no instrument.
         brief = _build_step_brief(step, approved_plan, user_query,
-                                  [f["content"] for f in step_findings])
+                                  [f["content"] for f in step_findings],
+                                  list(all_searches))
         logger.info(f"[DeepResearch] Step {i}/{len(steps)}: {title}")
         # run_worker_agent opens the audit delegation, but only this loop knows
         # the step number and the approved title — hand them over first.

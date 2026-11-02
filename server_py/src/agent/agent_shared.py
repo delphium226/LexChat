@@ -47,6 +47,7 @@ from .tools.executor import fetch_provision_list, fetch_text_with_schedules
 from ..utils.instrument_lookup import LOOKUP_TOOL
 from ..utils.made_under import MADE_UNDER_TOOL, made_under_note
 from ..utils.definitions import DEFINITIONS_TOOL, definitions_note
+from ..utils.literal_scan import search_scan_note
 from ..utils.search_scope import record_made_under, record_definitions
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
@@ -991,6 +992,10 @@ async def literal_scan_route(
     from .tools.literal_scan import scan_instruments
     outcomes = await scan_instruments(ids, literal, on_chunk=parent_on_chunk,
                                       timing_collector=timing_collector)
+    # P3.57 follow-up: kept for the request, so a later section search of a
+    # scanned instrument for this string is told what the scan found there
+    # (`literal_scan.search_scan_note`), in this step or a later one.
+    ls.remember_scan(cfg, literal, outcomes)
     limit = ls.BLOCK_MAX_CHARS
     if context_budget is not None:
         limit = max(2_000, min(limit, context_budget["limit"] - context_budget["used"]
@@ -2198,6 +2203,13 @@ async def run_worker_tool(
     # ("call search_legislation_sections with these ids") stays the last thing
     # the model reads on a productive search.
     result += scope_note
+    # P3.57 follow-up: a section search, for the scanned string, of an
+    # instrument a text scan by code earlier in this request read in full is
+    # told what the scan found, so a ranked search's non-return (and a
+    # summary saying "not present") is not reported as the instrument lacking
+    # it (`wave5_p357` 6382, 3 of 3). "" otherwise: no scan, another tool or
+    # instrument, a query for something else.
+    result += search_scan_note(name, args, get_request_provider_config())
     result += definitions_block
     result += not_held
     result += published_note

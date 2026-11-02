@@ -64,7 +64,14 @@ HANDOVER_LABEL = "EARLIER STEPS' INSTRUMENTS:"
 # the line says how many more there are.
 MAX_HANDED_ON_IDS = 40
 
-_LINE_START = re.compile(r"^" + re.escape(HANDOVER_LABEL) + r"[^\n]*\n?", re.M)
+# P3.57 follow-up (Session 52, worker p357b): the sibling line saying what an
+# earlier step's text scan by code read and found. `without_handover_line`
+# removes it too: it names up to 40 ids, which P3.7 must not look up.
+SCAN_HANDOVER_LABEL = "EARLIER STEPS' TEXT SCAN:"
+
+_LINE_START = re.compile(
+    r"^(?:" + re.escape(HANDOVER_LABEL) + "|" + re.escape(SCAN_HANDOVER_LABEL) + r")[^\n]*\n?",
+    re.M)
 
 
 def report_body(report: str) -> str:
@@ -116,6 +123,44 @@ def handover_line(reports: Iterable[str]) -> str:
             "an earlier step identified, they are among these: work on each one of the kind "
             "the task names, by its legislation_id, rather than finding the list again, "
             "and look further only if the task asks for more than the earlier steps reported."
+        )
+    except Exception:
+        return ""
+
+
+def scan_handover_line(entries: Iterable[dict]) -> str:
+    """P3.57 follow-up: the line for a later step's brief where an earlier
+    step's text scan by code (`utils/literal_scan.py`) read a made-under
+    list's texts for a string. "" where no earlier step ran one. Never raises.
+
+    **Why.** `wave5_p357` 6382, 3 of 3: step 2 was handed the 20 ids the scan
+    found '£' in (the line above) but not that the scan had read them, so it
+    section-searched each for "£"; the ranked search did not return SSI
+    2025/340's regulation 3, the step reported 2025/340 as not containing '£',
+    and the synthesis called it a discrepancy. Conditional ("Where this task
+    asks ..."), like the line above, so it asks nothing of a step that does
+    not work on the string."""
+    try:
+        from .literal_scan import SCAN_ENTRY, _id_list, _q
+
+        rows = [e for e in (entries or []) if isinstance(e, dict) and e.get("tool") == SCAN_ENTRY]
+        if not rows:
+            return ""
+        e = rows[-1]
+        q = _q(e["literal"])
+        read = len(e["found"]) + len(e["absent"])
+        unread = (f"; not read, {len(e['unread'])} ({_id_list(e['unread'])})"
+                  if e["unread"] else "")
+        return (
+            f"{SCAN_HANDOVER_LABEL} an earlier step's code read the whole text of {read} of the "
+            f"{e['listed']} instruments the made-under record listed (every provision and "
+            f"schedule as made) and searched each one for {q}: found in {len(e['found'])} "
+            f"({_id_list(e['found'])}); not found in the text read in {len(e['absent'])} "
+            f"({_id_list(e['absent'])}){unread}. That result stands for each instrument it "
+            f"read, so this task need not and should not section-search them for {q}: a "
+            "section search ranks provisions by meaning, and one that does not return "
+            f"{q} does not show that an instrument lacks it. Where this task asks which of "
+            f"them contain {q}, take it from this scan."
         )
     except Exception:
         return ""
