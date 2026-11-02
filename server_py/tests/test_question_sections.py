@@ -1,8 +1,8 @@
-"""P3.52 Fix 1: provisions ranked, by code, against the lawyer's own words.
+"""P3.52 Fix 1: provisions ranked, by code, against the legal professional's own words.
 
 After the quick-lookup Worker's FIRST `search_legislation` of a run, code runs
 one `search_legislation_sections` per Act in that result (at most three) with
-the lawyer's latest message as the query, and appends the top three provisions
+the legal professional's latest message as the query, and appends the top three provisions
 of each to that result. Q17's own words put s.38 of the Transport (Scotland)
 Act 2001 third in that Act's section search, where the Worker's own queries
 mostly never search the 2001 Act's sections (7 of 16 runs).
@@ -191,8 +191,8 @@ def test_the_block_wording():
         {"label": "s.38", "heading": "Grants to bus service operators",
          "url": f"{U}/{A2001}/section/38", "opening": "1) The Scottish Ministers may make grants."}])])
     assert block == (
-        "\n\n[PROVISIONS RANKED AGAINST THE LAWYER'S OWN WORDS — after this search, code "
-        "searched within the Act below, using the lawyer's latest message as written as the "
+        "\n\n[PROVISIONS RANKED AGAINST THE LEGAL PROFESSIONAL'S OWN WORDS — after this search, code "
+        "searched within the Act below, using the legal professional's latest message as written as the "
         "query, and lists the provisions the index ranked first. The index ranks by meaning, "
         "not by what a provision does: none of these is established as relevant to the "
         "question, and a provision not listed is not established as irrelevant. Before citing "
@@ -202,7 +202,7 @@ def test_the_block_wording():
         "  - s.38 Grants to bus service operators — "
         "http://www.legislation.gov.uk/id/asp/2001/2/section/38 — "
         "\"1) The Scottish Ministers may make grants.\"\n"
-        "[/PROVISIONS RANKED AGAINST THE LAWYER'S OWN WORDS]")
+        "[/PROVISIONS RANKED AGAINST THE LEGAL PROFESSIONAL'S OWN WORDS]")
     assert qs.render_block([(A2001, "T", [])]) == ""
 
 
@@ -228,7 +228,7 @@ def test_the_block_follows_the_first_search_and_the_imperative_stays_last(monkey
     assert "section/3C" not in tail and "section/42" not in tail          # top three only
     assert tail.index(qs.BLOCK_CLOSE) < tail.index("[NEXT STEP:")
     assert out.rstrip().endswith("]") and out.rfind("[NEXT STEP:") > out.rfind(qs.BLOCK_CLOSE)
-    # one call per Act, the SI not searched, the lawyer's words as the query
+    # one call per Act, the SI not searched, the legal professional's words as the query
     sec = [b for u, b in lex["calls"] if u.endswith("/legislation/section/search")]
     assert sorted(b["legislation_id"] for b in sec) == [A2001, A2005]
     assert all(b["query"] == Q17 and b["size"] == 10 for b in sec)

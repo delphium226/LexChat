@@ -1,4 +1,4 @@
-"""P3.52 Fix 1: provisions ranked, by code, against the lawyer's own words.
+"""P3.52 Fix 1: provisions ranked, by code, against the legal professional's own words.
 
 **Why this exists.** Q17 (6345), "What provision enables Scottish Ministers to
 establish a national bus fare cap scheme?": the reviewer's answer is s.38 of
@@ -16,7 +16,7 @@ make; a prompt rule asking it to make that call would be followed at a rate
 
 **What it does.** After the quick-lookup Worker's FIRST `search_legislation`
 of a run, code runs one `search_legislation_sections` per Act in that result
-(Acts only, in the result's order, at most `MAX_ACTS`), each with the lawyer's
+(Acts only, in the result's order, at most `MAX_ACTS`), each with the legal professional's
 latest message as the query, and appends one block to that result: the top
 `PER_ACT` provisions of each Act, with label, heading, URL and the opening
 `OPENING_CHARS` characters, saying they were ranked by meaning against the
@@ -62,10 +62,10 @@ SECTION_TOOL = "search_legislation_sections"
 # all 19 runs that returned it, so three Acts reach it every time.
 MAX_ACTS = 3
 PER_ACT = 3
-OPENING_CHARS = 300
+OPENING_CHARS = 200
 _TITLE_CHARS = 120
 _HEADING_CHARS = 120
-# The query sent: the lawyer's message, cut at a word past this (stored
+# The query sent: the legal professional's message, cut at a word past this (stored
 # questions: median 89 characters, longest 1,131).
 MAX_QUERY_CHARS = 1000
 # Distinctive words (three letters or more, not a stop word) a message must
@@ -82,8 +82,8 @@ PRIMARY_PREFIXES = frozenset({"ukpga", "ukppa", "ukla", "asp", "nia", "apni", "a
 MEMO_KEY = "_question_sections_memo"
 ENTRY_SOURCE = "question_sections"
 
-BLOCK_OPEN = "[PROVISIONS RANKED AGAINST THE LAWYER'S OWN WORDS"
-BLOCK_CLOSE = "[/PROVISIONS RANKED AGAINST THE LAWYER'S OWN WORDS]"
+BLOCK_OPEN = "[PROVISIONS RANKED AGAINST THE LEGAL PROFESSIONAL'S OWN WORDS"
+BLOCK_CLOSE = "[/PROVISIONS RANKED AGAINST THE LEGAL PROFESSIONAL'S OWN WORDS]"
 
 _STOP = frozenset("""
 a an the of and or to in on for by with under from at as be is are was were any other its it
@@ -228,7 +228,7 @@ def render_block(per_act: list) -> str:
     lines = [
         f"\n\n{BLOCK_OPEN} — after this search, code searched within "
         f"{'the Act' if len(held) == 1 else f'each of the {len(held)} Acts'} below, "
-        "using the lawyer's latest message as written as the query, and lists the "
+        "using the legal professional's latest message as written as the query, and lists the "
         "provisions the index ranked first. The index ranks by meaning, not by what a "
         "provision does: none of these is established as relevant to the question, and "
         "a provision not listed is not established as irrelevant. Before citing one, "
@@ -321,6 +321,6 @@ async def question_sections_block(
     except asyncio.CancelledError:
         raise
     except Exception:
-        logger.warning("[Worker] Provisions ranked against the lawyer's words: failed",
+        logger.warning("[Worker] Provisions ranked against the legal professional's words: failed",
                        exc_info=True)
         return "", []
