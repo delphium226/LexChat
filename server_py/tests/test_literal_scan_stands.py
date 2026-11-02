@@ -283,3 +283,22 @@ def test_seam_replay_reads_the_scan_entry_back_from_a_stored_block(unread):
     assert got[-1] == ls.scan_entry("£", ids, outcomes)
     assert seam_replay.scan_searches_from({"audit": {"delegations": [{"tools": [
         {"name": TOOL, "raw_result": _found(4), "final_result": _found(4)}]}]}}) == []
+
+
+def test_seam_replays_synthesis_seam_carries_the_scan_note():
+    """`tools.seam_replay synthesis` rebuilds the payload with the scan's entries,
+    read back from step 1's stored made-under result, so the dry run shows it."""
+    ids = ENTRY["ids"]
+    outcomes = {i: {"status": "read", "count": int(i in ENTRY["found"]), "provisions": [
+        {"label": "regulation 3", "url": f"https://x/{i}/regulation/3", "count": 1, "snippet": "£5"}]
+        if i in ENTRY["found"] else []} for i in ids}
+    final = _found(4) + ls.scan_block("£", ids, outcomes)
+    turn = {"chat_mode": "deep_research", "research_mode": "legislation_only", "question": Q,
+            "plan": {"scope_note": "Widgets.", "steps": [{"title": "Find them", "detail": ""}]},
+            "audit": {"delegations": [{"step": 1, "report": REPORT, "tools": [
+                {"name": TOOL, "raw_result": _found(4), "final_result": final}]}]}}
+    body = seam_replay.synthesis_messages({"filters": {}}, turn)[1]["content"]
+    assert "[SEARCH SCOPE — text scan by code, across every step:" in body
+    turn["audit"]["delegations"][0]["tools"][0]["final_result"] = _found(4)
+    body = seam_replay.synthesis_messages({"filters": {}}, turn)[1]["content"]
+    assert "text scan by code" not in body
