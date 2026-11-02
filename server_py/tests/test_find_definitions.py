@@ -109,7 +109,7 @@ def _rows():
         _row("nisr/2012/246", '“shop” means any premises', "regulation/2"),
         _row("ssi/2013/85", 'In this regulation “duty free shop” means an export shop.',
              "regulation/2"),
-        _row("[UNCLEAR: no document reference provided]", '"shop" has the same meaning as in '
+        _row("S.I. 1949 No. 404", '"shop" has the same meaning as in '
              'the Shops Act 1912.', "section/15"),
         _row("uksi/2010/863", "this row mentions a shop but defines nothing", "regulation/3"),
     ]
@@ -119,7 +119,7 @@ def test_one_entry_per_instrument_in_the_order_returned():
     d = D.build_result(_rows(), "shop")
     ids = [e["legislation_id"] for e in d["definitions"]]
     assert ids == ["ukpga/1950/28", "asp/2007/13", "ukpga/1994/20", "nisr/2012/246",
-                   "[UNCLEAR: no document reference provided]"]
+                   "S.I. 1949 No. 404"]
     assert d["count"] == d["listed"] == 5 and d["rows_read"] == 8
     first = d["definitions"][0]
     assert first["definition"].startswith('"shop" means any premises where retail trade')
@@ -151,6 +151,93 @@ def test_an_unclear_reference_carries_no_link():
     assert unclear["reference_unclear"] is True and "url" not in unclear
     assert d["reference_unclear"] == 1
     assert "reference_unclear" in D.definitions_note(json.dumps(d))
+    assert "unidentified" not in d                          # a citation is not a placeholder
+
+
+# The index's own placeholder ids (`wave5_p334`, 6363 'occupier'): OCR'd records
+# whose legislation_id, and the uri built on it, identify nothing.
+_PLACEHOLDERS = [
+    "[UNCLEAR: possible reference 'ni/1944/80']",
+    "[UNCLEAR: nireland/1942/48]",
+    "ukpga/1855/27 [UNCLEAR: local act reference]",
+    '[UNCLEAR: official reference; document shows "Regulations. 1929. No. 21."]',
+]
+# Not seen in the saved responses (every placeholder there is bracketed), but
+# the word alone is the index's own marker of an id it could not read.
+_UNBRACKETED = "UNCLEAR: Local Act 1886 c.34"
+
+
+@pytest.mark.parametrize("lid", _PLACEHOLDERS + [_UNBRACKETED])
+def test_a_placeholder_id_is_recognised(lid):
+    assert D.is_placeholder_id(lid) and D.is_placeholder_id(LEX + lid)
+
+
+@pytest.mark.parametrize("lid", ["ssi/2013/85", "ukpga/Geo6/12-13-14/25", "S.I. 1949 No. 404",
+                                 "nireland/1942/206", "ukpga/1932/15 (22 & 23 Geo. 5. c. xv)",
+                                 "", None, "asp/2007/13/unclearance"])
+def test_a_reference_is_not_a_placeholder(lid):
+    assert not D.is_placeholder_id(lid)
+
+
+def _placeholder_rows():
+    return _rows() + [
+        _row(_PLACEHOLDERS[0], '"shop" means a place of retail sale.', "section/3"),
+        _row(_PLACEHOLDERS[0], '"shop" includes a stall.', "section/4"),      # same record
+        _row(_PLACEHOLDERS[2], '"shop" means any premises; "shop window" means glass.'),
+        _row(_PLACEHOLDERS[1], 'In this order "shop premises" means a shop.'),  # longer only
+    ]
+
+
+def test_a_placeholder_id_is_never_listed_and_is_counted():
+    d = D.build_result(_placeholder_rows(), "shop")
+    listed = [e["legislation_id"] for e in d["definitions"] + d["longer_terms"]]
+    assert not any("[" in x or "UNCLEAR" in x for x in listed)
+    assert d["unidentified"] == 2                          # records, not rows
+    assert d["count"] == d["listed"] == 5                  # the identified ones only
+    assert d["reference_unclear"] == 1                     # the citation stays
+    assert "UNCLEAR" not in json.dumps(d)
+
+
+def test_the_block_counts_them_and_forbids_naming_them():
+    note = D.definitions_note(json.dumps(D.build_result(_placeholder_rows(), "shop")))
+    assert "2 further provision(s)" in note and "not listed and cannot be cited" in note
+    assert "never what they are" in note
+    assert note.count("[") == 1 and note.count("]") == 1    # one block, nothing inside
+
+
+def test_only_placeholders_is_a_none_found_block_that_counts_them():
+    rows = [_row(_PLACEHOLDERS[0], '"shop" means a place of retail sale.')]
+    d = D.build_result(rows, "shop")
+    assert d["count"] == 0 and d["unidentified"] == 1 and d["definitions"] == []
+    note = D.definitions_note(json.dumps(d))
+    assert "in an instrument the index identifies" in note
+    assert "1 further provision(s)" in note and "NOT evidence" in note
+
+
+def test_without_placeholders_the_block_is_unchanged():
+    d = D.build_result(_rows(), "shop")
+    note = D.definitions_note(json.dumps(d))
+    assert "further provision(s)" not in note and "identifies" not in note
+    empty = D.definitions_note(json.dumps(D.build_result([_row("ssi/1/1", "no term")], "shop")))
+    assert "identifies" not in empty and "further provision" not in empty
+
+
+def test_a_placeholder_under_a_filter_counts_as_removed_not_unidentified():
+    rows = [_row(_PLACEHOLDERS[0], '"shop" means a stall.', extent=["Northern Ireland"])]
+    d = D.build_result(rows, "shop", jurisdiction="scotland")
+    assert d.get("removed_by_filters") == 1 and "unidentified" not in d
+
+
+def test_the_limb_counts_them():
+    log = []
+    ss.record_definitions(log, TOOL, {"term": "shop"},
+                          json.dumps(D.build_result(_placeholder_rows(), "shop")))
+    assert log[0]["unidentified"] == 2
+    assert "2 more in records the index does not identify, not listed" in ss._definitions_limb(log)
+    log2 = []
+    ss.record_definitions(log2, TOOL, {"term": "shop"}, json.dumps(D.build_result(_rows(), "shop")))
+    assert "unidentified" not in log2[0]
+    assert "does not identify" not in ss._definitions_limb(log2)
 
 
 def test_a_jurisdiction_filter_applies_in_and_keeps_not_stated():
@@ -333,7 +420,7 @@ def test_recorded_and_sources_extracted(_pipeline):
     assert entry[0]["rows"] == 8 and entry[0]["longer"] == 1
     lids = [s["_lid"] for s in sources]
     assert "ukpga/1950/28" in lids
-    assert not any("UNCLEAR" in x for x in lids)          # no link, no rail entry
+    assert not any("S.I." in x for x in lids)             # no link, no rail entry
     assert all(not s.get("excerpt") for s in sources)
     assert "legislation.gov.uk/ukpga/1950/28/section/74" in urls
 
