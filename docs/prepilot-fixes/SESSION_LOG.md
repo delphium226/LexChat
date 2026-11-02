@@ -10115,3 +10115,25 @@ director alone merged, ran paid replays one at a time and wrote the records.
 
 **Take next:** P3.57, P3.58 (measure first), P3.28's instruction, P3.34's follow-ups. **The user's, on the
 target:** pull `v2026.10.5` and restart; the traversal follow-ups (HTTP log check; a real `JWT_SECRET`).
+
+### Session 52, continued (2026-11-02) — the issues list (user's focus): P3.28, P3.29, P3.57, P3.58, P4.8, P4.25, P4.26 done ($13.81)
+
+The user asked to set target-server follow-ups aside and work the issues list. Five workers in parallel worktrees, then
+merges one at a time with the full suite after each (4,686 → 4,840).
+- **P3.57** (Thomas's '£' scan; workers `p357`, `p357b`): ground truth corrected to 20 of 37 (two '£' counted from a
+  summariser's prose); code reads every listed instrument when the question asks for a literal (scan read 30 s, user
+  decision). `wave5_p357` ($3.91): 6383 3 of 3 clean; 6382 named all 20 but called SSI 2025/340 a 'discrepancy' 3 of 3
+  (a later step's ranked search did not return its '£'). Follow-up (brief line, search note, synthesis note):
+  `wave5_p357b` ($1.73) 6382 3 of 3 and 6383 1 of 1 clean. Done.
+- **P3.58** (worker `p358`): 7 invented amounts in 5 of 6,783 stored summaries ('£151' reached two answers); removed
+  P3.45's way; the dry run is the acceptance (user decision). Done.
+- **P3.29, P4.8** (worker `p329`): appeal detector 317 flagged → 107 (105 genuine); the leaked label removed after the
+  Manager writes, 0 in this session's sweeps. Done.
+- **P4.25, P4.26** (worker `p425`): the rail shows only the selected answer's sources ('None for this answer', checked
+  by the director in the browser on chat 5); lookup and made-under instruments the answer names reach the rail (607 in
+  86 stored turns). Done; **B8 closed**.
+- **P3.28** (worker `p328`): `_IN_FORCE_RULE` (b) reads the removal classes; seam inconclusive ($0.20); `wave5_p328`
+  ($3.88) 6375 3 of 3 with no misclassified removal. Done.
+- **Spend:** $0.20 + $1.46 + $3.88 + $2.45 + $1.38 + $0.35 + seam $0.20 counted once = $13.81 incl. P3.28's seam.
+- FIX_PLAN: 93 of 115, 2 in progress (P3.51, P3.52 parked), 9 of 14 buckets. Worktrees removed; `lev1`, `levB2` kept.
+

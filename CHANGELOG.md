@@ -42,6 +42,24 @@ Answers:
   legislation.gov.uk (P3.48).
 - **The line under an answer names one list of the change records consulted**,
   not two that could disagree (P4.20).
+- **A question asking which instruments made under a power contain a symbol or
+  word** gets every listed instrument read in full by code, and the answer says
+  which contain it and that the rest were read and do not (P3.57).
+- **A repeal of words only, or a qualified removal, is no longer described as
+  the provision being out of force** (P3.28).
+- **An amount a condensed summary states that its source does not contain** is
+  removed before the research step reads it (P3.58).
+- **The internal "[Research Agent Result]" label** no longer reaches answers (P4.8).
+
+Case law:
+- **The appeal detector no longer links unrelated cases** that share one common
+  word of a party's name (P3.29).
+
+Sources list:
+- **An answer with no sources of its own shows none**, with a button to show the
+  earlier answer's, instead of showing the previous answer's sources (P4.25).
+- **Instruments taken from a direct lookup or a "made under" list** appear in the
+  sources list where the answer names them (P4.26).
 
 ## 2026.10.5 — 2026-10-30
 
