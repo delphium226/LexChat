@@ -186,6 +186,20 @@ def _published_text_offline(monkeypatch):
         lambda: _httpx.AsyncClient(transport=_httpx.MockTransport(_refuse)))
 
 
+@pytest.fixture(autouse=True)
+def _literal_scan_offline(monkeypatch):
+    """FIX_PLAN P3.57: nor through the text scan of a made-under list. By
+    default its provision-list read fails, so a scan in any test reports every
+    instrument as not read (legislation.gov.uk is refused above);
+    `tests/test_literal_scan.py` serves synthetic provision lists itself."""
+    from src.agent.tools import literal_scan as _ls
+
+    async def _failed(*a, **k):
+        return {"status": "failed"}
+
+    monkeypatch.setattr(_ls, "_read_list", _failed)
+
+
 @pytest_asyncio.fixture
 async def db_session():
     """Provide a DB session for each test."""

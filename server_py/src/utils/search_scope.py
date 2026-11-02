@@ -86,6 +86,7 @@ from .instrument_lookup import (
     parse_lookup_result,
 )
 from .published_text import published_footer_clause, published_limb
+from .literal_scan import SCAN_ENTRY, scan_footer, scan_limb
 from .removal_effects import (
     PROVISION_KEY,
     QUALIFIED_KEY,
@@ -1019,6 +1020,7 @@ def _made_under_footer_clause(entries: Optional[list]) -> str:
     return (
         f" The record of enabling powers consulted here covers {cov}; anything "
         "outside that coverage was not checked." + revoked + _list_coverage_footer(entries)
+        + scan_footer(entries)
     )
 
 
@@ -1229,6 +1231,20 @@ def list_coverage(entries: Optional[list]) -> Optional[dict]:
                 if best is None or (m, len(ids)) > (best["M"], best["N"]):
                     best = {"N": len(ids), "M": m, "query": shown,
                             "unsearched": [i for i in ids if i not in checked]}
+        # P3.57: a text scan by code over the list read each instrument it
+        # could in full, so it is a candidate too; on a tie it wins, since it
+        # says more than a section search can (a search ranks by meaning).
+        for e in entries or []:
+            if e.get("tool") != SCAN_ENTRY or not isinstance(e.get("ids"), list):
+                continue
+            checked = {_list_id(x) for x in (e.get("found") or []) + (e.get("absent") or [])}
+            for ids in lists:
+                if set(ids) != {_list_id(x) for x in e["ids"]}:
+                    continue
+                m = len(set(ids) & checked)
+                if best is None or (m, len(ids), 1) > (best["M"], best["N"], int(bool(best.get("scan")))):
+                    best = {"N": len(ids), "M": m, "query": str(e.get("literal") or ""),
+                            "unsearched": [i for i in ids if i not in checked], "scan": True}
         if best:
             q = best["query"].strip("\"'‘’“” ")
             best["query"] = q.replace('"', "'").replace("[", "(").replace("]", ")")[:80]
@@ -1240,6 +1256,8 @@ def list_coverage(entries: Optional[list]) -> Optional[dict]:
 def _list_coverage_text(cov: dict, who: str) -> str:
     """The sentences shared by the Worker's scope block and the synthesis note."""
     n, m, q = cov["N"], cov["M"], cov["query"]
+    if cov.get("scan"):
+        return _scan_coverage_text(cov)
     if m < n:
         rest = n - m
         were, those, contain = ("was", "that one", "contains") if rest == 1 else (
@@ -1256,6 +1274,28 @@ def _list_coverage_text(cov: dict, who: str) -> str:
         f'for "{q}". If the answer names those in which it was found, it MUST also say that '
         f'the other listed instruments were searched and "{q}" was not found in the text '
         "returned."
+    )
+
+
+def _scan_coverage_text(cov: dict) -> str:
+    """P3.57: the list-coverage sentences where code read the list's texts."""
+    n, m, q = cov["N"], cov["M"], cov["query"]
+    if m >= n:
+        return (
+            f"the made-under record listed {n} instruments, and code read every one of them "
+            f'in full and searched it for "{q}" (the text scan). If the answer names those in '
+            f'which it was found, it MUST also say that the other listed instruments were read '
+            f'in full and "{q}" does not appear in their provisions and schedules as made.'
+        )
+    rest = n - m
+    were, those, contain = ("was", "that one", "contains") if rest == 1 else (
+        "were", f"those {rest}", "contain")
+    return (
+        f"the made-under record listed {n} instruments, and code read {m} of them in full "
+        f'and searched them for "{q}" (the text scan). The other {rest} could not be read '
+        f"({_and_more(cov['unsearched'], _LIST_COVERAGE_NAMED)}). If the answer says which "
+        f'of the listed instruments contain "{q}", it MUST say that {rest} of the {n} {were} '
+        f"not checked, and say nothing of what {those} {contain}."
     )
 
 
@@ -1284,7 +1324,7 @@ def _list_coverage_footer(entries: Optional[list]) -> str:
     """P3.53's sentence for the legal professional, where some of the list was
     not searched. "" otherwise."""
     cov = list_coverage(entries)
-    if not cov or cov["M"] >= cov["N"]:
+    if not cov or cov["M"] >= cov["N"] or cov.get("scan"):
         return ""
     rest = cov["N"] - cov["M"]
     return (f" Of the {cov['N']} instruments the made-under record lists, {cov['M']} were "
@@ -3449,6 +3489,10 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _definitions = _definitions_limb(log)
     if _definitions:
         lines.append(_definitions)
+    # P3.57: what code's text scan of the list read and found.
+    _scan = scan_limb(log)
+    if _scan:
+        lines.append(_scan)
     # P3.53: straight after the list it qualifies.
     _list_cov = _list_coverage_limb(log, cfg)
     if _list_cov:

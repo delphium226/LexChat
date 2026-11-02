@@ -873,6 +873,71 @@ async def published_text_route(
     return pt.published_block(lid, kind, outcome, how, body, total_chars=len(text)), outcome
 
 
+async def literal_scan_route(
+    name: str,
+    raw_result,
+    query: str,
+    search_log: Optional[list],
+    parent_on_chunk: Optional[Callable] = None,
+    timing_collector=None,
+    retrieved_urls: Optional[set] = None,
+    context_budget: Optional[dict] = None,
+    pending_chars: int = 0,
+) -> tuple:
+    """P3.57: a literal string searched for, by code, in every instrument of a
+    made-under list. Returns ``(block_for_the_worker, scope_entries)``.
+
+    ``("", [])`` unless all three hold: this is a `find_instruments_made_under`
+    result that found instruments and lists every one of them (40 or fewer,
+    `literal_scan.MAX_SCANNED`); and the Worker's brief, or the legal
+    professional's latest message (`_cache_key_query`, which
+    `with_lawyer_words` also hands the Worker), asks for a literal string
+    (`literal_scan.detect_literal`). Then each listed instrument's text is read
+    (`agent/tools/literal_scan.py`) and searched, and the Worker gets one
+    compact block (`literal_scan.scan_block`), sized within what remains of
+    its context budget; the texts themselves never reach it. The provision
+    URLs it names join `retrieved_urls`, so the Worker may cite them (P1.6).
+    Exceptions propagate: the caller fails soft.
+    """
+    from ..utils import literal_scan as ls
+    if name != MADE_UNDER_TOOL:
+        return "", []
+    try:
+        d = json.loads(raw_result) if isinstance(raw_result, str) else dict(raw_result or {})
+    except (TypeError, ValueError):
+        return "", []
+    insts = d.get("instruments") if isinstance(d, dict) else None
+    if (not isinstance(insts, list) or d.get("status") != "found"
+            or not 0 < len(insts) == int(d.get("count") or 0) <= ls.MAX_SCANNED):
+        return "", []
+    cfg = get_request_provider_config() or {}
+    literal = ls.detect_literal(query, cfg.get("_cache_key_query") or "")
+    if not literal:
+        return "", []
+    ids = [str(i.get("legislation_id") or "") for i in insts if i.get("legislation_id")]
+    titles = {str(i.get("legislation_id")): str(i.get("title") or "")
+              for i in insts if i.get("legislation_id")}
+    from .tools.literal_scan import scan_instruments
+    outcomes = await scan_instruments(ids, literal, on_chunk=parent_on_chunk,
+                                      timing_collector=timing_collector)
+    limit = ls.BLOCK_MAX_CHARS
+    if context_budget is not None:
+        limit = max(2_000, min(limit, context_budget["limit"] - context_budget["used"]
+                               - pending_chars))
+    block = ls.scan_block(literal, ids, outcomes, titles, max_chars=limit)
+    if retrieved_urls is not None:
+        urls = [p.get("url") for o in outcomes.values() for p in (o.get("provisions") or [])]
+        harvest_legislation_urls(json.dumps({str(i): u for i, u in enumerate(urls) if u}),
+                                 into=retrieved_urls)
+    entry = ls.scan_entry(literal, ids, outcomes)
+    if search_log is not None:
+        search_log.append(entry)
+    logger.info("[Worker] Text scan by code of %d made-under instruments: found in %d, "
+                "not found in %d, not read %d", len(ids), len(entry["found"]),
+                len(entry["absent"]), len(entry["unread"]))
+    return block, [entry]
+
+
 async def _empty_search_text(args: dict, scope_note: str, result_suffix: str,
                              empty_search_lookup: Callable,
                              search_log: Optional[list]) -> tuple:
@@ -1326,6 +1391,9 @@ async def run_worker_tool(
             # the read that followed it.
             if search_log is not None and hit.get("empty_lookup_entries"):
                 search_log.extend(dict(e) for e in hit["empty_lookup_entries"])
+            # P3.57: and what code's text scan of the made-under list found.
+            if search_log is not None and hit.get("scan_entries"):
+                search_log.extend(dict(e) for e in hit["scan_entries"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -1720,6 +1788,22 @@ async def run_worker_tool(
         # P3.31: the reverse question, answered from the made-under record.
         enabling_note = made_under_note(raw_result)
         record_made_under(search_log, raw_result)
+    # P3.57: where the question asks for a literal string, code searches the
+    # text of every listed instrument for it. Self-gated (the tool, a whole
+    # list of 40 or fewer, a literal detected); fail-soft (Invariant 5): on any
+    # failure the made-under result is exactly as it was.
+    scan_note, _scan_entries = "", []
+    if name == MADE_UNDER_TOOL:
+        try:
+            scan_note, _scan_entries = await literal_scan_route(
+                name, raw_result, query, search_log, parent_on_chunk=parent_on_chunk,
+                timing_collector=timing_collector, retrieved_urls=retrieved_urls,
+                context_budget=context_budget, pending_chars=len(result) + len(enabling_note))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("[Worker] Text scan of a made-under list failed", exc_info=True)
+            scan_note, _scan_entries = "", []
     # P3.34: what the definitions search read and kept, for the Worker (the
     # block) and for the Manager's limb and the footer (the record). From the
     # RAW result, which is also what the Worker receives: it is never
@@ -2037,6 +2121,7 @@ async def run_worker_tool(
     result += not_held
     result += published_note
     result += enabling_note
+    result += scan_note
     result += family_note
     result += schedules_line
     result += relations_note
@@ -2070,6 +2155,9 @@ async def run_worker_tool(
         # P3.38: and what the code lookup after an empty section search recorded.
         if _empty_lookup_entries:
             tool_memo[memo_key]["empty_lookup_entries"] = _empty_lookup_entries
+        # P3.57: and what the text scan of a made-under list recorded.
+        if _scan_entries:
+            tool_memo[memo_key]["scan_entries"] = _scan_entries
 
     # Charged after the nudges are appended: what is counted is exactly what the
     # model receives, so the budget tracks the real context growth.
