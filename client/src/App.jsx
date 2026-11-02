@@ -13,6 +13,7 @@ import {
 import ChatMessage from './components/ChatMessage';
 import { LexMark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
+import { railTurn } from './utils/railTurn';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginModal from './components/LoginModal';
 import AdminPortal from './pages/AdminPortal';
@@ -313,29 +314,14 @@ function AppContent() {
     return out;
   }, [runSummaries]);
 
-  // ID of the last assistant message that has sources (used for default highlight)
-  const latestSourceMsgId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant' && messages[i].sources?.length && messages[i].id) {
-        return messages[i].id;
-      }
-    }
-    return null;
-  }, [messages]);
-
-  // Sources for the rail — shows explicitly selected turn, else the latest turn
-  const activeSources = useMemo(() => {
-    if (activeSourcesMsgId != null) {
-      const msg = messages.find(m => m.id === activeSourcesMsgId);
-      if (msg?.sources?.length) return msg.sources;
-    }
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant' && messages[i].sources?.length) {
-        return messages[i].sources;
-      }
-    }
-    return [];
-  }, [messages, activeSourcesMsgId]);
+  // P4.25: the answer the Sources rail belongs to — the one whose Sources
+  // button was pressed, else the latest — and its sources. An answer with no
+  // source of its own shows none (and says so), never an earlier answer's.
+  const rail = useMemo(
+    () => railTurn(messages, activeSourcesMsgId, streaming),
+    [messages, activeSourcesMsgId, streaming]
+  );
+  const activeSources = rail.sources;
 
   // Two parliamentary bots share this client, selected by the bot's research mode:
   // Holyrood (unicameral, Sessions 1-7) and Westminster (two Houses, Parliaments).
@@ -847,7 +833,7 @@ function AppContent() {
                       sourcesActive={
                         msg.role === 'assistant' &&
                         msg.id != null &&
-                        (msg.id === activeSourcesMsgId || (activeSourcesMsgId == null && msg.id === latestSourceMsgId))
+                        msg.id === rail.id
                       }
                     />
                     {/* Chips only under the newest answer — a long thread must
@@ -1050,6 +1036,15 @@ function AppContent() {
           {/* Sources rail */}
           <SourcesRail
             sources={activeSources}
+            forAnswer={rail.hasTurn}
+            onShowEarlier={
+              rail.earlierId != null
+                ? () => {
+                    setActiveSourcesMsgId(rail.earlierId);
+                    setSourcesCollapsed(false);
+                  }
+                : undefined
+            }
             activeCite={activeCite}
             onCiteClick={setActiveCite}
             collapsed={sourcesCollapsed}
