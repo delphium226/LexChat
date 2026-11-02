@@ -907,6 +907,29 @@ async def draft_research_plan(
 
 RESEARCH_RESULT_PREFIX = "[Research Agent Result]\n"
 
+# P4.8: the prefix above labels a delegation's report for the MANAGER, and in
+# research mode the Manager is told to pass the report through verbatim, so it
+# sometimes copied the label too: over every stored replay directory (90, 2,682
+# answered turns) 7 answers opened with `[Research Agent Result]`, every one a
+# Research-mode turn whose answer was the label and the report it heads; none
+# in Conversational or Deep Research. Code never writes the label into an
+# answer, so every copy is an echo, and it is removed at the Manager return
+# whatever its position, with backticks round it and the line break after it.
+# Same shape as P2.1's halt-marker strip and P2.2's scope-block strip: what the
+# Manager receives is unchanged.
+_RESULT_LABEL = re.compile(r"(`?)\[Research Agent Result\]\1[ \t]*(?:\r?\n)?")
+
+
+def strip_result_label(text: str) -> tuple:
+    """Remove every `[Research Agent Result]` label from an answer. Returns
+    (text, count); `text` unchanged, byte for byte, when there is none."""
+    if not text or "[Research Agent Result]" not in text:
+        return text, 0
+    out, n = _RESULT_LABEL.subn("", text)
+    if n:
+        out = re.sub(r"\n{3,}", "\n\n", out).strip()
+    return out, n
+
 
 def worker_result_for_manager(content: str, cfg: dict, retrieved_urls=None) -> str:
     """The `delegate_research` tool result the Manager is handed.
@@ -1182,6 +1205,15 @@ async def process_user_request(
         manager_call=True,
         manager_report_in_hand=lambda: bool(worker_reports),
     )
+
+    # P4.8: the label the Manager's tool results carry, copied into its answer,
+    # removed first: above P4.2, so an answer that was the label alone reads as
+    # the empty answer it is and gets the research in hand; above every pass
+    # that reads the answer's opening (the agreement-opener strip).
+    if final.get("content"):
+        final["content"], _labels = strip_result_label(final["content"])
+        if _labels:
+            logger.info("[Manager] Removed %d copied research-result label(s)", _labels)
 
     # P4.2 (B13). Last line of defence, above every strip below - all of which
     # are no-ops on an empty body, so without this the scope footer is appended
