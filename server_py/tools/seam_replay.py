@@ -1053,9 +1053,12 @@ def manager_head(doc: dict, turn: dict, without_fix: bool = False,
         # The constant at `rev` is the triple-quoted literal alone; the live
         # body is that literal plus the research-mode hint appended to it.
         import src.prompts as prompts
+        # Not `hint`: that name is the --hint flag below, and rebinding it to
+        # this (non-empty) string made every --without-fix draw apply P3.2's
+        # live provision hint to the lawyer's turn (Session 52, Fix 2).
         live = prompts._MANAGER_CONV_BODY
-        hint = prompts.RESEARCH_MODE_HINT_ON
-        literal = live[:-len(hint)] if live.endswith(hint) else live
+        mode_hint = prompts.RESEARCH_MODE_HINT_ON
+        literal = live[:-len(mode_hint)] if live.endswith(mode_hint) else live
         if literal not in system:
             raise SystemExit("--without-fix: the live conversational body is not in the prompt")
         system = system.replace(literal, _prompt_constant_at(rev, "_MANAGER_CONV_BODY"), 1)
