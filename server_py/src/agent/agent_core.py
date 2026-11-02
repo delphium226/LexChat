@@ -254,6 +254,9 @@ async def run_worker_agent(
     worker_tools = get_worker_tools(research_mode, cfg.get("_chat_mode"))
     quick_lookup = is_quick_lookup_worker(research_mode, cfg.get("_chat_mode"))
     source_accumulator: list = []
+    # P4.26: the instruments a lookup (held) or a made-under list returned,
+    # apart from the accumulator: lever R's candidates only (`listed_only`).
+    listed_instruments: list = []
     # Limit discovery searches so the model proceeds to Phase 2 instead of looping.
     # Parliamentary modes: three calls to the SP search tools / search_hansard (see
     # _PARLIAMENT_SEARCH_TOOLS in agent_shared), unchanged. P2.7: legislation modes
@@ -335,6 +338,7 @@ async def run_worker_agent(
             result_suffix=result_suffix,
             provision_fetches=provision_fetches,
             empty_search_lookup=_empty_search_lookup,
+            listed_accumulator=listed_instruments,
         )
         handed_paras.extend(handed_paragraphs(out))
         # P3.50 (A1): the court's own limits this Worker was handed, read back
@@ -534,6 +538,14 @@ async def run_worker_agent(
         # P4.3 lever R: everything retrieved, for the answer seam to re-admit
         # what the answer cites and no report named (`readmit_answer_sources`).
         result["retrieved_sources"] = retrieved_with_marks(source_accumulator, kept)
+    # P4.26: a lookup's or made-under list's instrument no other tool retrieved,
+    # never in the rail from the report, offered to lever R, which adds it only
+    # where the answer names it.
+    # A separate key, read by lever R alone: P4.23's linker, P3.51's listing
+    # and P4.24's titles read `retrieved_sources` and are unchanged by it.
+    _listed = listed_only(listed_instruments, source_accumulator)
+    if _listed:
+        result["listed_sources"] = _listed
     # P4.24: titles for the rail's bare-id entries (`title_rail_sources`).
     result["retrieved_titles"] = dict(lookup_titles)
 
@@ -676,6 +688,20 @@ def retrieved_with_marks(source_accumulator: list, kept: list) -> list:
     `_kept` if the Worker-seam filter put it in the rail. Lever R's input."""
     kept_ids = {id(src) for src in kept}
     return [{**src, "_kept": id(src) in kept_ids} for src in source_accumulator]
+
+
+def listed_only(listed: list, source_accumulator: list) -> list:
+    """P4.26: the instruments a lookup or made-under list returned (`listed`,
+    from `agent_shared._extract_listed_instruments`) that no other tool of the
+    run put in the accumulator, marked not kept, for lever R. An instrument the
+    accumulator holds is left to its own entry (titled, possibly kept), so the
+    rail never holds it twice. Never raises."""
+    try:
+        have = {s.get("_lid") for s in source_accumulator if s.get("_lid")}
+        return [{**s, "_kept": False} for s in listed if s.get("_lid") not in have]
+    except Exception as e:  # Invariant 5
+        logger.warning("[Sources] Listed instruments skipped: %s", e)
+        return []
 
 
 def readmit_answer_sources(rail: list, retrieved: list, answer: str,
@@ -1002,6 +1028,9 @@ async def process_user_request(
     accumulated_sources: list = []
     # P4.3 lever R: every source every delegation retrieved, marked kept or not.
     retrieved_sources: list = []
+    # P4.26: the instruments lookups and made-under lists returned that no other
+    # tool did, for lever R alone (`listed_only`).
+    listed_sources: list = []
     # P4.24: the exact titles every delegation's lookups returned.
     retrieved_titles: dict = {}
     # P2.2 (B5): every legislation search this turn ran, across ALL delegations,
@@ -1115,6 +1144,7 @@ async def process_user_request(
                 if not _is_duplicate_source(src, accumulated_sources):
                     accumulated_sources.append(src)
             retrieved_sources.extend(result.get("retrieved_sources") or [])
+            listed_sources.extend(result.get("listed_sources") or [])
             for _lid, _t in (result.get("retrieved_titles") or {}).items():
                 retrieved_titles.setdefault(_lid, _t)
             if result.get("halted"):
@@ -1368,8 +1398,16 @@ async def process_user_request(
     # P4.3 lever R: a source the answer cites that no report vouched for. Read
     # against the answer as the lawyer sees it, before the scope footer, which
     # names searched instruments in code's words, not the answer's.
+    # P4.26: with the lookups' and made-under lists' instruments, after every
+    # other source, so an instrument another tool retrieved keeps its own entry.
+    # A made-under list cuts a long title, which then names nothing; P4.24's
+    # fill gives such an entry its full title first, so the answer naming the
+    # instrument by its title is read as naming it.
+    if listed_sources:
+        listed_sources = await title_rail_sources(
+            listed_sources, retrieved_sources, retrieved_titles)
     _readmitted = readmit_answer_sources(
-        accumulated_sources, retrieved_sources, clean, research_mode)
+        accumulated_sources, retrieved_sources + listed_sources, clean, research_mode)
     if _readmitted:
         logger.info("[Manager] Re-admitted %d source(s) the answer cites", len(_readmitted))
         accumulated_sources.extend(_readmitted)
@@ -1586,6 +1624,9 @@ async def run_deep_research(
     accumulated_sources: list = []
     # P4.3 lever R: every source every step retrieved, marked kept or not.
     retrieved_sources: list = []
+    # P4.26: the instruments lookups and made-under lists returned that no other
+    # tool did, for lever R alone (`listed_only`).
+    listed_sources: list = []
     # P4.24: the exact titles every step's lookups returned.
     retrieved_titles: dict = {}
     # Per-request tool-result memo: plan steps run as isolated workers, so two
@@ -1667,6 +1708,7 @@ async def run_deep_research(
             if not _is_duplicate_source(src, accumulated_sources):
                 accumulated_sources.append(src)
         retrieved_sources.extend(result.get("retrieved_sources") or [])
+        listed_sources.extend(result.get("listed_sources") or [])
         for _lid, _t in (result.get("retrieved_titles") or {}).items():
             retrieved_titles.setdefault(_lid, _t)
         all_searches.extend(result.get("searches") or [])
@@ -1798,8 +1840,11 @@ async def run_deep_research(
 
     # P4.3 lever R, as on the Manager path: the synthesis names instruments a
     # step's scope block listed and no step report did (408 stored misses).
+    if listed_sources:   # P4.26, as on the Manager path
+        listed_sources = await title_rail_sources(
+            listed_sources, retrieved_sources, retrieved_titles)
     _readmitted = readmit_answer_sources(
-        accumulated_sources, retrieved_sources, _content,
+        accumulated_sources, retrieved_sources + listed_sources, _content,
         _dr_cfg.get("_research_mode") or "legislation_only")
     if _readmitted:
         logger.info("[DeepResearch] Re-admitted %d source(s) the report cites", len(_readmitted))

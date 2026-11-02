@@ -142,6 +142,77 @@ def _extract_sources_from_tool(name: str, args: dict, raw_result_str: str, accum
         logger.debug(f"[Sources] Extraction skipped for '{name}': {e}")
 
 
+# P4.26: the lookup states that establish the instrument is in the index (an
+# instrument "not held", a failed or invalid lookup gets no rail entry: none of
+# them shows the instrument exists at the number asked).
+_LISTED_LOOKUP_STATES = frozenset({"held", "held_without_text"})
+
+
+def _extract_listed_instruments(name: str, args: dict, raw_result_str: str,
+                                listed: list) -> None:
+    """P4.26: the instruments a `lookup_legislation` (held, with or without
+    text) or a `find_instruments_made_under` list returned, appended to
+    `listed`, one entry per `legislation_id`. Never raises.
+
+    Kept apart from the source accumulator on purpose. These entries reach the
+    rail only at the answer seam, through lever R (`readmit_answer_sources`),
+    and only where the ANSWER names the instrument: a made-under list holds up
+    to 40, and the Worker seam's keep test reads the report, which commonly
+    lists every one. Apart, they also leave the accumulator's counts as they
+    were (`sources_extracted`, the halt and lost reports' "N source(s) had been
+    retrieved", `source_filter_fallback`). No excerpt, for P3.5's reason: the
+    tool established the instrument, it did not read its text."""
+    if name not in (LOOKUP_TOOL, MADE_UNDER_TOOL):
+        return
+    try:
+        data = json.loads(raw_result_str)
+    except Exception:
+        return
+    if not isinstance(data, dict):
+        return
+    try:
+        have = {s.get("_lid") for s in listed}
+
+        def _add(lid: str, title: str, url: str, sub: str = "") -> None:
+            if not lid or lid in have:
+                return
+            have.add(lid)
+            title = title.strip()
+            # The made-under list cuts a title at 110 characters with an
+            # ellipsis. A cut title names nothing (`named_in` refuses the head
+            # of a longer title) and shows no year, so the entry takes its id,
+            # which P4.24's fill replaces with the record's full title.
+            if title.endswith("…"):
+                title = ""
+            entry = {
+                "_lid": lid,
+                "kind": _legislation_kind(lid),
+                "title": title or lid,
+                "cite": lid,
+                "url": url or f"https://www.legislation.gov.uk/{lid}",
+            }
+            if sub:
+                entry["sub"] = sub
+            listed.append(entry)
+
+        if name == LOOKUP_TOOL:
+            if data.get("status") in _LISTED_LOOKUP_STATES:
+                _add(str(data.get("legislation_id") or ""), str(data.get("title") or ""),
+                     str(data.get("url") or ""))
+            return
+        if data.get("status") != "found":
+            return
+        prov = str(data.get("provision") or "").replace("/", " ").strip()
+        act = str(data.get("matched_act") or "").strip()
+        sub = f"recorded as made under {prov} of {act}" if prov and act else ""
+        for inst in data.get("instruments") or []:
+            if isinstance(inst, dict):
+                _add(str(inst.get("legislation_id") or ""), str(inst.get("title") or ""),
+                     str(inst.get("url") or ""), sub)
+    except Exception as e:
+        logger.debug(f"[Sources] Listed-instrument extraction skipped for '{name}': {e}")
+
+
 def _legislation_kind(legislation_id: str) -> str:
     """Derive a human-readable source kind from the legislation_id path prefix."""
     prefix = legislation_id.split("/")[0].lower()
@@ -1129,6 +1200,7 @@ async def run_worker_tool(
     result_suffix: str = "",
     provision_fetches: Optional[dict] = None,
     empty_search_lookup: Optional[Callable] = None,
+    listed_accumulator: Optional[list] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -1190,6 +1262,10 @@ async def run_worker_tool(
             Where the index lacks the instrument or its text, the empty-search
             note says so and the text code read from legislation.gov.uk on that
             lookup follows it. None (the default) changes nothing.
+        listed_accumulator: If provided, the instruments a lookup (held) or a
+            made-under list returned are appended to it from the raw result,
+            on a memo hit too (P4.26, `_extract_listed_instruments`): lever R's
+            candidates, apart from `source_accumulator`. None changes nothing.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -1266,6 +1342,8 @@ async def run_worker_tool(
             # extraction on the stored RAW result against this step's accumulator.
             if source_accumulator is not None:
                 _extract_sources_from_tool(name, args, hit["raw"], source_accumulator)
+            if listed_accumulator is not None:
+                _extract_listed_instruments(name, args, hit["raw"], listed_accumulator)
             # Same for the retrieved-URL set: the memo saves the fetch, not the
             # provenance. A step reusing a memoised retrieval has still retrieved
             # those provisions and must be allowed to cite them.
@@ -1416,6 +1494,9 @@ async def run_worker_tool(
     # Extract sources from the raw structured response BEFORE summarisation compresses it.
     if source_accumulator is not None:
         _extract_sources_from_tool(name, args, result, source_accumulator)
+    # P4.26: a lookup's or made-under list's instruments, for lever R only.
+    if listed_accumulator is not None:
+        _extract_listed_instruments(name, args, result, listed_accumulator)
 
     # P1.6 (B14): record every legislation.gov.uk URL this retrieval returned,
     # from the RAW response. "Did the research retrieve this provision" and "was
