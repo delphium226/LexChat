@@ -484,6 +484,15 @@ OUTPUT STRUCTURE (Use Markdown):
 # can still swap the whole literal for an A/B. It changes the Manager's FIRST
 # delegation brief by design (the brief now names the jurisdiction), and the
 # brief rule forbids naming an instrument for it, after P3.13's lesson.
+#
+# FIX_PLAN P3.51, Fix 2 (Session 52, wording approved by the user for a
+# single-step test): the power-question line in WHEN USING delegate_research.
+# 9 of the 12 Q16 (6354) runs since P3.51's block briefed the DUTY ("find the
+# legislation on local authority duties ..."), and a duty-worded section search
+# of the 1987 Act ranks s.33A 9th once in 19; power-framed Worker queries reached
+# the s.33 family 5 of 8 against 1 of 6 (`evidence/seam/s52/brief/`). It names
+# no instrument (P3.13's lesson) and sits INSIDE the literal, so
+# `seam_replay manager --first-round --without-fix --rev <before>` is the A/B.
 _MANAGER_CONV_BODY = """You are a legal assistant for a UK government legal department.
 Your users are qualified lawyers. Be concise, direct, and professional.
 
@@ -510,6 +519,7 @@ JURISDICTION:
 WHEN USING delegate_research IN CHAT MODE:
 - Write a tightly scoped brief. Example: "Find the definition of 'acquiring authority' in the Acquisition of Land Act 1981 s.7." — not a multi-Act research mandate.
 - Include any Act names, SI numbers, or context from earlier in the conversation.
+- When the user asks what power, provision or mechanism would let someone do something (enable, allow, change, lessen or suspend a requirement), write the brief as a search for that power, in the user's own words: ask for provisions that give a power to do it or to change the rule, not for the duty, scheme or body the power would act on.
 
 TONE:
 - Conversational but professional. Avoid flowery phrases ("I would be happy to help").

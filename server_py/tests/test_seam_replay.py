@@ -538,6 +538,22 @@ def test_manager_without_fix_hands_over_the_bare_report_and_the_old_body(monkeyp
     assert "CITATION PRESERVATION" not in msgs[0]["content"]
 
 
+@pytest.mark.parametrize("without_fix", [False, True])
+def test_manager_head_applies_the_provision_hint_only_when_asked(monkeypatch, without_fix):
+    """Session 52 (Fix 2): `manager_head` rebound its `hint` flag to the
+    research-mode hint string on the --without-fix side, so every such draw
+    prefixed P3.2's live provision hint to the lawyer's turn and the A/B
+    differed in more than the prompt."""
+    monkeypatch.setattr(sr, "_prompt_constant_at", lambda rev, name: f"OLD {name} @ {rev}")
+    called = []
+    monkeypatch.setattr(sr, "apply_hint", lambda messages: called.append(1) or messages)
+    doc = _conv_doc()
+    sr.manager_head(doc, doc["turns"][0], without_fix, "abc1234")
+    assert called == []
+    sr.manager_head(doc, doc["turns"][0], without_fix, "abc1234", hint=True)
+    assert called == [1]
+
+
 def test_the_manager_body_reader_finds_the_constant():
     text = sr._prompt_constant_at("HEAD", "_MANAGER_CONV_BODY")
     assert "CURRENT MODE: Chat" in text
