@@ -88,9 +88,10 @@ SUMMARY_GLOSS_RULE = (
 
 def check_summary_citations(summary: str, source, query: str = "") -> str:
     """P3.45: the summary with every case citation its source does not hold
-    removed, and (P3.47) every case named without a citation that the source
-    does not name (`utils.summary_citations.strip_unsourced_citations`, which says
-    what goes and why). Run on every summary the Worker is handed: a fresh
+    removed, (P3.47) every case named without a citation that the source
+    does not name, and (P3.58) every money amount the source does not hold
+    (`utils.summary_citations.strip_unsourced_citations`, which says what goes
+    and why; `utils.summary_amounts` says when an amount is held). Run on every summary the Worker is handed: a fresh
     one here, and a local-cache hit in `run_worker_tool`, so a row stored
     before this check is checked when it is served. Fail-soft: the summary
     comes back unchanged on any error."""
@@ -103,9 +104,10 @@ def check_summary_citations(summary: str, source, query: str = "") -> str:
     if removed:
         actions = ", ".join(sorted({r["action"] for r in removed}))
         names = sum(1 for r in removed if r.get("kind") == "name")
-        logger.info(f"[SummaryCheck] removed {len(removed) - names} case citation(s) and {names} "
-                    f"case name(s) the summarised text does not hold ({actions}; "
-                    f"{len(summary) - len(checked)} chars)")
+        amounts = sum(1 for r in removed if r.get("kind") == "amount")
+        logger.info(f"[SummaryCheck] removed {len(removed) - names - amounts} case citation(s) and "
+                    f"{names} case name(s) and {amounts} amount(s) the summarised text does not "
+                    f"hold ({actions}; {len(summary) - len(checked)} chars)")
         logger.debug(f"[SummaryCheck] removed: {[r['citation'] for r in removed]}")
     return checked
 

@@ -52,9 +52,17 @@ the question's case), a name with no distinctive word, a placeholder ("Rex v
 [Name]"), and any passage that also carries a citation the source holds (the
 source's own authority is never removed to remove a bare name).
 
-It only removes; it never adds a word. A summary with no unheld citation or
-name is returned unchanged, byte for byte. Fail-soft: any error returns the
-summary unchanged (Invariant 5).
+**A money amount the source does not hold (P3.58, Session 52).** An amount
+(`summary_amounts.unsourced_amounts`, which says when one is held) that neither
+the source nor the research question holds takes its passage: the list item
+where it stands in the item's first sentence and the item has no nested lines,
+otherwise its sentence (with the list a sentence ending in a colon introduces).
+Never a heading or the block under it, an item with nested lines, or a passage
+that also carries a citation or an amount the source holds: those stay.
+
+It only removes; it never adds a word. A summary with no unheld citation,
+name or amount is returned unchanged, byte for byte. Fail-soft: any error
+returns the summary unchanged (Invariant 5).
 """
 from __future__ import annotations
 
@@ -62,6 +70,8 @@ import json
 import logging
 import re
 from typing import NamedTuple, Optional
+
+from .summary_amounts import find_amounts, unsourced_amounts
 
 logger = logging.getLogger("agent")
 
@@ -684,13 +694,15 @@ def _contentless(line: str) -> bool:
 
 
 def strip_unsourced_citations(summary: str, raw, query: str = "") -> tuple[str, list[dict]]:
-    """The summary with every citation the source does not hold, and every
-    bare case name it does not name (P3.47), removed as described in the
-    module docstring, and one record per removal:
+    """The summary with every citation the source does not hold, every
+    bare case name it does not name (P3.47) and every amount it does not hold
+    (P3.58), removed as described in the module docstring, and one record per
+    removal:
     {"citation", "name", "action": "citation" | "case" | "item" | "block" | "sentence"}
     ("case": the case and its citation, out of a list of authorities in one
     line), with "kind": "name" on a bare name's record ("citation" is then the
-    name as written).
+    name as written) and "kind": "amount" on an amount's ("citation" and "name"
+    are the amount as written; "action" is "item" or "sentence").
 
     Unchanged (and []) where nothing is unheld, and on any error."""
     try:
@@ -703,7 +715,10 @@ def strip_unsourced_citations(summary: str, raw, query: str = "") -> tuple[str, 
 def _strip(summary: str, raw, query: str) -> tuple[str, list[dict]]:
     if not summary:
         return summary, []
-    uns = sorted(unsourced_citations(summary, raw, query) + unsourced_names(summary, raw, query),
+    unheld_amounts = unsourced_amounts(summary, raw, query)
+    uns = sorted(unsourced_citations(summary, raw, query) + unsourced_names(summary, raw, query)
+                 + [Unsourced(Citation("amount", a.start, a.end, a.text, str(a.pence)), a.text, False)
+                    for a in unheld_amounts],
                  key=lambda u: u.citation.start)
     if not uns:
         return summary, []
@@ -729,6 +744,11 @@ def _strip(summary: str, raw, query: str) -> tuple[str, list[dict]]:
     records: list[dict] = []
     index = SourceIndex(raw, query)
     held_at = [x.start for x in all_cites if index.held(x)]
+    # P3.58: what an amount's removal must not carry, besides a held citation:
+    # an amount the source holds.
+    unheld_at = {a.start for a in unheld_amounts}
+    kept_at = held_at + ([a.start for a in find_amounts(summary) if a.start not in unheld_at]
+                         if unheld_amounts else [])
 
     def _sentence_cut(li: int, col: int) -> tuple[tuple[int, int], range]:
         """The span of line li a sentence removal takes, and the lines of a
@@ -753,13 +773,14 @@ def _strip(summary: str, raw, query: str) -> tuple[str, list[dict]]:
             return (a, b), range(i0, i1)
         return (a, b), range(0)
 
-    def _holds_held(li_range, cut=None) -> bool:
+    def _holds_held(li_range, cut=None, at=None) -> bool:
         """Whether a removal carries a citation the source holds: P3.47 never
-        removes the source's own authority to remove a bare name."""
+        removes the source's own authority to remove a bare name (nor P3.58
+        a held citation or a held amount to remove an amount: `at`)."""
         spans = [(starts[i], starts[i] + len(lines[i])) for i in li_range]
         if cut:
             spans.append((starts[cut[0]] + cut[1], starts[cut[0]] + cut[2]))
-        return any(s <= h < e for h in held_at for s, e in spans)
+        return any(s <= h < e for h in (held_at if at is None else at) for s, e in spans)
 
     for u in uns:
         c = u.citation
@@ -770,6 +791,30 @@ def _strip(summary: str, raw, query: str) -> tuple[str, list[dict]]:
         rec = {"citation": c.text, "name": u.name}
         if is_name:
             rec["kind"] = "name"
+        if c.kind == "amount":
+            # P3.58: an amount the source does not hold takes its list item
+            # (one line, the amount in its first sentence) or its sentence;
+            # never a heading or the block under it, an item with nested
+            # lines, or a passage that carries a held citation or amount.
+            rec["kind"] = "amount"
+            if _is_heading(line) and not _is_item(line):
+                continue
+            m_item = _ITEM.match(line)
+            if m_item and _sentence_span(line[m_item.end():], max(0, col - m_item.end()))[0] == 0:
+                i0, i1 = _item_span(lines, li)
+                if i1 - i0 > 1 or _holds_held(range(i0, i1), at=kept_at):
+                    continue
+                drop_lines.update(range(i0, i1))
+                rec["action"] = "item"
+            else:
+                (a, b), more = _sentence_cut(li, col)
+                if _holds_held(more, (li, a, b), at=kept_at):
+                    continue
+                sentence_cuts.setdefault(li, []).append((a, b))
+                drop_lines.update(more)
+                rec["action"] = "sentence"
+            records.append(rec)
+            continue
         if u.name_held is not False:
             cite_cuts.setdefault(li, []).append((col, c.end - starts[li]))
             rec["action"] = "citation"
