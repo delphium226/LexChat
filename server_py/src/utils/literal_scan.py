@@ -50,6 +50,9 @@ __all__ = [
     "scan_entry",
     "scan_limb",
     "scan_footer",
+    "remember_scan",
+    "search_scan_note",
+    "scan_synthesis_note",
 ]
 
 # The scope-record entry's `tool` (`search_scope`'s recorders read it).
@@ -438,3 +441,131 @@ def scan_footer(entries: Optional[list]) -> str:
     return (f" Of the {e['listed']} instruments the made-under record lists, code read the text "
             f"of {read} (their provisions and schedules as made) and searched it for {q}; the "
             f"other {n} could not be read and {'was' if n == 1 else 'were'} not checked.")
+
+
+# ---------------------------------------------------------------------------
+# The scan's result over a later section search (Session 52, worker p357b)
+# ---------------------------------------------------------------------------
+#
+# `wave5_p357` 6382 (Deep Research), 3 of 3: step 1's scan read all 37 texts and
+# found '£' in 20, SSI 2025/340 among them (regulation 3, "£11.29"). Step 2 was
+# handed the 20 ids (P3.10) but not the scan, section-searched each for "£", and
+# the search ranked ten provisions of 2025/340 that do not carry it; the
+# summariser wrote "the specific symbol requested is not present in the provided
+# text" (r1, r2), the step reported 2025/340 as not containing '£', and the
+# synthesis set that against the scan as a "discrepancy" or "conflicting
+# findings". A ranked search's non-return outweighed a full read because no
+# reader after step 1 was told the read had been made. So code says it to each
+# of them: a later step's brief (`step_handover.scan_handover_line`), the
+# synthesis (`scan_synthesis_note`), and a section search of a scanned
+# instrument for the scanned string (`search_scan_note`).
+
+# The request config's key for the scans this request made (P3.57's own
+# `MEMO_KEY` precedent: the config is the one request-scoped dict every step
+# and every tool task shares). A list of `{"literal", "outcomes"}`.
+STORE_KEY = "_literal_scan_results"
+
+_LID = re.compile(r"^(?:https?://(?:www\.)?legislation\.gov\.uk/)?(?:id/)?([a-z]+/\d{4}/\d+)")
+
+
+def _lid(x: Any) -> str:
+    m = _LID.match(str(x or "").strip())
+    return m.group(1) if m else ""
+
+
+def remember_scan(cfg: Any, literal: str, outcomes: dict) -> None:
+    """Keep this request's scan outcomes on the request config, for
+    `search_scan_note`. A config that is not a non-empty dict (a script, a
+    test without one) keeps nothing. Never raises."""
+    try:
+        if not isinstance(cfg, dict) or not cfg or not literal or not outcomes:
+            return
+        store = cfg.get(STORE_KEY)
+        if not isinstance(store, list):
+            store = []
+            cfg[STORE_KEY] = store
+        store.append({"literal": str(literal),
+                      "outcomes": {_lid(k) or str(k): v for k, v in outcomes.items()}})
+    except Exception:
+        return
+
+
+def _asks_for(query: str, literal: str) -> bool:
+    """Whether a section search's query is a search for this literal: it
+    holds the literal as the scan matched it, or asks for it in words."""
+    rx = literal_pattern(literal)
+    q = str(query or "")
+    return bool(rx and (rx.search(q) or detect_literal(q) == literal))
+
+
+def search_scan_note(name: str, args: Any, cfg: Any) -> str:
+    """The note on a `search_legislation_sections` result for an instrument a
+    text scan earlier in this request read, where the search asks for the
+    scanned string. "" otherwise (another tool, no scan, an instrument the
+    scan did not read, a query for something else). Never raises."""
+    try:
+        if name != "search_legislation_sections" or not isinstance(cfg, dict):
+            return ""
+        store = cfg.get(STORE_KEY)
+        if not isinstance(store, list) or not store or not isinstance(args, dict):
+            return ""
+        lid = _lid(args.get("legislation_id"))
+        query = str(args.get("query") or "")
+        if not lid or not query.strip():
+            return ""
+        for scan in reversed(store):
+            literal = scan.get("literal") or ""
+            o = (scan.get("outcomes") or {}).get(lid) or {}
+            if o.get("status") != "read" or not _asks_for(query, literal):
+                continue
+            q = _q(literal)
+            head = (f"\n\n[SEARCH SCOPE — text scan by code, {lid}: earlier in this research "
+                    f"code read the whole text of {lid} (every provision and schedule as made) "
+                    f"and searched it for {q}. ")
+            if int(o.get("count") or 0) > 0:
+                found = _found_line(lid, "", o, SNIPPETS_PER_INSTRUMENT)[len(f"- {lid}: "):]
+                return (head + f"Found {found}. That result stands: {lid} contains {q}. The "
+                        "provisions above are ranked by meaning, so if none of them carries "
+                        f"{q}, that shows only that this search did not rank a provision holding "
+                        f"it: do not report {lid} as not containing {q}, and do not "
+                        f"section-search it for {q} again.]")
+            return (head + f"It is not there. That result stands: you MAY state that {lid} does "
+                    f"not contain {q} in its provisions and schedules as made, never that no "
+                    f"later amendment inserts it; do not section-search it for {q} again.]")
+        return ""
+    except Exception:
+        return ""
+
+
+def scan_synthesis_note(entries: Optional[list]) -> str:
+    """The Deep Research synthesis's note: the scan's result stands over a
+    step's section search that did not return the string. A SEARCH SCOPE
+    block by name with no brackets inside, so `strip_scope_blocks` removes it
+    whole if the synthesis copies it. "" where no scan ran, or it found the
+    string in none. Never raises."""
+    try:
+        rows = _scan_rows(entries)
+        if not rows:
+            return ""
+        e = rows[-1]
+        if not e.get("found"):
+            return ""
+        q = _q(e["literal"])
+        read = len(e["found"]) + len(e["absent"])
+        unread = (f"; {len(e['unread'])} could not be read ({_id_list(e['unread'])})"
+                  if e["unread"] else "")
+        return (
+            f"\n\n[SEARCH SCOPE — text scan by code, across every step: code read the whole "
+            f"text of {read} of the {e['listed']} instruments the made-under record listed "
+            f"(every provision and schedule as made) and searched each one for {q}. It found "
+            f"{q} in {len(e['found'])} ({_id_list(e['found'])}) and not in the text read of "
+            f"{len(e['absent'])} ({_id_list(e['absent'])}){unread}. For each instrument it "
+            f"found {q} in, that result stands over any step's report that a section search "
+            f"of the instrument did not return {q}: a section search ranks provisions by "
+            "meaning, so not returning a string shows only that the search did not rank a "
+            f"provision holding it, never that the instrument lacks it. Report each of them "
+            f"as containing {q}, citing the provision the scan found it in, and do not "
+            "present such a step's report as a discrepancy or a conflicting finding.]"
+        )
+    except Exception:
+        return ""
