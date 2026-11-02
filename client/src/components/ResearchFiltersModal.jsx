@@ -4,6 +4,7 @@ import {
   HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
+  RESEARCH_TYPE_OPTIONS,
   getLatestSession,
   getRecordTypeOptions,
   getSessionFilterLabel,
@@ -251,11 +252,9 @@ export default function ResearchFiltersModal({
             {/* § Research type */}
             <div>
               {secHead('Research type')}
-              {[
-                { value: 'legislation_only', label: 'Legislation only' },
-                { value: 'case_law_only', label: 'Case law only' },
-                { value: 'legislation_and_case_law', label: 'Legislation & case law' },
-              ].map(opt => optBtn(researchMode === opt.value, () => set('researchMode', opt.value), opt.label))}
+              {RESEARCH_TYPE_OPTIONS.map(opt =>
+                optBtn(researchMode === opt.value, () => set('researchMode', opt.value), opt.label)
+              )}
             </div>
 
             {/* § Jurisdiction */}
