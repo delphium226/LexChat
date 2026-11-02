@@ -204,9 +204,10 @@ def test_a_literal_over_a_whole_list_hands_the_worker_the_scan(monkeypatch):
     out, log = _run(raw, urls=urls)
     assert out.startswith(_expected_without_scan(raw))
     block = out[len(_expected_without_scan(raw)):]
-    assert block.startswith('\n\n[SEARCH SCOPE — text scan by code: the question asks for "£"')
+    assert block.startswith('\n\n[SEARCH SCOPE — text scan by code: the question asks which of '
+                            'these instruments contain "£"')
     assert "read the text of 4 of the 4 instruments" in block
-    assert "Found in 2:\n- ssi/1901/1 (The Widget Regulations 1901 No. 1): 3 times in 2 provision(s)" in block
+    assert "Found in 2:\n- ssi/1901/1 (The Widget Regulations 1901 No. 1): 3 times in 2 provisions" in block
     assert "regulation 3 (https://www.legislation.gov.uk/ssi/1901/1/regulation/3)" in block
     assert "- ssi/1901/3 (The Widget Regulations 1901 No. 3): once in legislation.gov.uk's text" in block
     assert "Not found in the text read, 2: ssi/1901/2, ssi/1901/4." in block

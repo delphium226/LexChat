@@ -312,7 +312,7 @@ def _times(n: int) -> str:
 def _found_line(lid: str, title: str, o: dict, snippets: int) -> str:
     provs = o.get("provisions") or []
     where = ("in legislation.gov.uk's text" if o.get("source") == "legislation.gov.uk"
-             else f"in {len(provs)} provision(s)")
+             else f"in {len(provs)} provision" + ("" if len(provs) == 1 else "s"))
     parts = []
     for p in provs[:snippets]:
         parts.append(f"{p['url']}: \"{p['snippet']}\"" if p["label"] == "its text"
@@ -355,7 +355,8 @@ def scan_block(literal: str, listed: list, outcomes: dict, titles: Optional[dict
         unread_bits = [f"{l} ({_REASONS.get((outcomes.get(l) or {}).get('reason'), 'the read did not complete')})"
                        for l in unread]
         body = (
-            f"\n\n[SEARCH SCOPE — text scan by code: the question asks for {q}, and a section "
+            f"\n\n[SEARCH SCOPE — text scan by code: the question asks which of these "
+            f"instruments contain {q}, and a section "
             "search ranks provisions by meaning, so it cannot find a string. Code therefore read "
             f"the text of {read} of the {len(listed)} instruments listed above, every provision "
             "and schedule as made (from this index, or from legislation.gov.uk where the index "
