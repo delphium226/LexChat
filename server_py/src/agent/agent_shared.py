@@ -93,6 +93,8 @@ from .tools import (
 )
 from .tools.caselaw import named_case_note
 from ..utils.court_limits import court_limit_note
+from ..utils.question_sections import ENTRY_SOURCE as QUESTION_SECTIONS_SOURCE
+from ..utils.question_sections import question_sections_block
 
 logger = logging.getLogger("agent")
 
@@ -1109,6 +1111,37 @@ def _case_law_note_with_scottish(args: dict, result) -> str:
         return ""
 
 
+async def _question_sections(raw_result, query: str, parent_on_chunk, timing_collector,
+                             pending_chars: int = 0,
+                             context_budget: Optional[dict] = None) -> tuple:
+    """P3.52 Fix 1: `(block, scope entries, shown URLs)` for the quick-lookup
+    Worker's first `search_legislation` result. Each code section search goes
+    through the executor (so the audit records its API call under this
+    search), never through `run_worker_tool`: it is not a Worker tool call
+    and is charged to no budget. The block is left off where it would take
+    the run past its context budget. Never raises but CancelledError."""
+    async def fetch(lid: str, q: str) -> str:
+        return await execute_worker_tool(
+            "search_legislation_sections", {"query": q, "legislation_id": lid},
+            on_chunk=parent_on_chunk, timing_collector=timing_collector)
+
+    block, fetched = await question_sections_block(raw_result, query, fetch)
+    if not block:
+        return "", [], []
+    if (context_budget is not None
+            and context_budget["used"] + pending_chars + len(block) > context_budget["limit"]):
+        return "", [], []
+    entries, urls = [], []
+    for args, shown in fetched:
+        before = len(entries)
+        record_search(entries, "search_legislation_sections", args, shown)
+        for e in entries[before:]:
+            e["by_code"] = QUESTION_SECTIONS_SOURCE
+        urls.extend(r["url"] for r in shown.get("results") or [] if r.get("url"))
+    harvested = harvest_legislation_urls(json.dumps({"results": [{"url": u} for u in urls]}))
+    return block, entries, sorted(harvested)
+
+
 async def run_worker_tool(
     name: str,
     args: dict,
@@ -1129,6 +1162,7 @@ async def run_worker_tool(
     result_suffix: str = "",
     provision_fetches: Optional[dict] = None,
     empty_search_lookup: Optional[Callable] = None,
+    question_sections_query: str = "",
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -1190,6 +1224,13 @@ async def run_worker_tool(
             Where the index lacks the instrument or its text, the empty-search
             note says so and the text code read from legislation.gov.uk on that
             lookup follows it. None (the default) changes nothing.
+        question_sections_query: The lawyer's latest message, passed by
+            `run_worker_agent` on the quick-lookup Worker's first
+            `search_legislation` of a run only (P3.52 Fix 1,
+            `utils/question_sections.py`). Code then searches within each Act
+            the result returned (up to three) with it and appends the top
+            provisions of each. Not charged to any budget; recorded as code
+            section searches. "" (the default) changes nothing.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -1326,6 +1367,12 @@ async def run_worker_tool(
             # the read that followed it.
             if search_log is not None and hit.get("empty_lookup_entries"):
                 search_log.extend(dict(e) for e in hit["empty_lookup_entries"])
+            # P3.52 Fix 1: and the section searches code ran after it, with
+            # the provision URLs its block showed.
+            if search_log is not None and hit.get("question_section_entries"):
+                search_log.extend(dict(e) for e in hit["question_section_entries"])
+            if retrieved_urls is not None and hit.get("question_section_urls"):
+                retrieved_urls.update(hit["question_section_urls"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -2027,6 +2074,28 @@ async def run_worker_tool(
         logger.warning("[Worker] Schedule route after a section search failed", exc_info=True)
         fetched_note = ""
 
+    # P3.52 Fix 1: on the quick-lookup Worker's first legislation search of a
+    # run, the top provisions of each Act it returned, ranked by code against
+    # the lawyer's own words. Code text, so after P1.8's bound on the tool's
+    # own output; before the Phase-2 nudge, so the imperative stays last.
+    # Fail-soft (Invariant 5): on any failure the result is unchanged.
+    question_note, _question_entries, _question_urls = "", [], []
+    if question_sections_query and name == "search_legislation":
+        try:
+            question_note, _question_entries, _question_urls = await _question_sections(
+                raw_result, question_sections_query, parent_on_chunk, timing_collector,
+                pending_chars=len(result), context_budget=context_budget)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("[Worker] Provisions ranked against the lawyer's words failed",
+                           exc_info=True)
+            question_note, _question_entries, _question_urls = "", [], []
+        if search_log is not None:
+            search_log.extend(dict(e) for e in _question_entries)
+        if retrieved_urls is not None:
+            retrieved_urls.update(_question_urls)
+
     # Append phase nudges after summarisation so they are not discarded
     # by the summariser and remain visible in the message the model receives.
     # P2.2's scope block goes on before the Phase-2 nudge, so the imperative
@@ -2046,6 +2115,7 @@ async def run_worker_tool(
     # cannot drop it. Self-gated on `get_case_law_text`; "" where the text
     # holds no such passage, so every other result is unchanged.
     result += court_limit_note(name, raw_result)
+    result += question_note
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note
@@ -2070,6 +2140,10 @@ async def run_worker_tool(
         # P3.38: and what the code lookup after an empty section search recorded.
         if _empty_lookup_entries:
             tool_memo[memo_key]["empty_lookup_entries"] = _empty_lookup_entries
+        # P3.52 Fix 1: and the section searches code ran after it.
+        if _question_entries:
+            tool_memo[memo_key]["question_section_entries"] = _question_entries
+            tool_memo[memo_key]["question_section_urls"] = list(_question_urls)
 
     # Charged after the nudges are appended: what is counted is exactly what the
     # model receives, so the budget tracks the real context growth.
