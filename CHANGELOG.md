@@ -18,6 +18,31 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
+Pre-pilot fixes on `fix/prepilot-defects` (Session 52), not yet cut:
+
+Research:
+- **The research step now sees every note the system adds to a long result**
+  (P1.8). A last-resort length limit in the chat loop cut long search and
+  lookup results at a fixed length, and the system's own notes, which come at
+  the end, went first: revocations, the instruments made under the sections
+  found, what a search can and cannot show. The tool's own output is now
+  limited before the notes are added.
+- **A question asking for every statutory definition of a term** gets one
+  search of all legislation for provisions defining it, each listed with its
+  defining words (P3.34; Research and Deep Research).
+- **A judgment's own limit on its decision** is shown to the research step and
+  the Deep Research write-up, and added to an answer that leaves it out, quoted
+  (P3.50).
+- **A power question is briefed as a search for the power** (P3.51).
+
+Answers:
+- **Instruments made under a section the answer cites** are listed at the end
+  of a chat answer, with revocations marked (P3.51, P3.52).
+- **A revoked instrument a chat answer names** is marked as recorded on
+  legislation.gov.uk (P3.48).
+- **The line under an answer names one list of the change records consulted**,
+  not two that could disagree (P4.20).
+
 ## 2026.10.5 — 2026-10-30
 
 Eighth cut (merge `471468b`): the pre-pilot fixes from Sessions 47 to 51
