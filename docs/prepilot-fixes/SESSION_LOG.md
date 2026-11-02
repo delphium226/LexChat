@@ -10116,7 +10116,7 @@ director alone merged, ran paid replays one at a time and wrote the records.
 **Take next:** P3.57, P3.58 (measure first), P3.28's instruction, P3.34's follow-ups. **The user's, on the
 target:** pull `v2026.10.5` and restart; the traversal follow-ups (HTTP log check; a real `JWT_SECRET`).
 
-### Session 52, continued (2026-11-02) — the issues list (user's focus): P3.28, P3.29, P3.57, P3.58, P4.8, P4.25, P4.26 done ($13.81)
+### Session 52, continued (2026-11-02) — the issues list (user's focus): P3.28, P3.29, P3.57, P3.58, P4.8, P4.25, P4.26 done ($9.72)
 
 The user asked to set target-server follow-ups aside and work the issues list. Five workers in parallel worktrees, then
 merges one at a time with the full suite after each (4,686 → 4,840).
@@ -10134,6 +10134,6 @@ merges one at a time with the full suite after each (4,686 → 4,840).
   86 stored turns). Done; **B8 closed**.
 - **P3.28** (worker `p328`): `_IN_FORCE_RULE` (b) reads the removal classes; seam inconclusive ($0.20); `wave5_p328`
   ($3.88) 6375 3 of 3 with no misclassified removal. Done.
-- **Spend:** $0.20 + $1.46 + $3.88 + $2.45 + $1.38 + $0.35 + seam $0.20 counted once = $13.81 incl. P3.28's seam.
+- **Spend:** P3.28 seam $0.20 + `wave5_p357` $1.46 (6383) + `wave5_p328` $3.88 + `wave5_p357` $2.45 (6382) + `wave5_p357b` $1.38 + $0.35 = $9.72.
 - FIX_PLAN: 93 of 115, 2 in progress (P3.51, P3.52 parked), 9 of 14 buckets. Worktrees removed; `lev1`, `levB2` kept.
 
