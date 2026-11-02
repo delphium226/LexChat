@@ -255,6 +255,42 @@ def test_provision_lists_are_read_once_a_request(monkeypatch):
     assert a["ssi/1901/1"]["count"] == 3 and b["ssi/1901/1"]["count"] == 0
 
 
+def test_the_scan_gives_a_legislation_gov_uk_read_30_seconds(monkeypatch):
+    """User decision, Session 52: the scan's legislation.gov.uk read gets
+    SCAN_READ_TIMEOUT_S (30 s), not P3.38's 15 s."""
+    _serve(monkeypatch)
+    seen = {}
+
+    async def read_published(lid, **kw):
+        seen[lid] = kw.get("read_timeout")
+        return {"status": "ok", "version": "made", "url": "u", "text": "The fee is £40."}
+    monkeypatch.setattr(ptio, "read_published_text", read_published)
+
+    async def go():
+        set_request_provider_config({"_test": True})
+        return await io.scan_instruments(["ssi/1901/3"], "£")
+    out = asyncio.run(go())
+    assert io.SCAN_READ_TIMEOUT_S == 30.0
+    assert seen == {"ssi/1901/3": 30.0}
+    assert out["ssi/1901/3"]["count"] == 1
+
+
+def test_the_published_read_passes_its_timeout_to_each_get(monkeypatch):
+    import httpx
+    got = []
+
+    def handler(request):
+        got.append(request.extensions.get("timeout"))
+        return httpx.Response(404, text="")
+    monkeypatch.setattr(ptio, "_client", lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+    async def go():
+        set_request_provider_config({"_test": True})
+        return await ptio.read_published_text("ssi/2025/195", read_timeout=30.0)
+    asyncio.run(go())
+    assert got and all(t and t.get("read") == 30.0 for t in got)
+
+
 # --- (5) the instruments it could not read -------------------------------------------------
 
 def test_an_instrument_it_could_not_read_is_named_not_counted_absent(monkeypatch):

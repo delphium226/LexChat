@@ -38,7 +38,11 @@ from . import published_text
 logger = logging.getLogger("agent")
 
 SCAN_CONCURRENCY = 4
-SCAN_DEADLINE_S = 45.0
+SCAN_DEADLINE_S = 75.0
+# A legislation.gov.uk read for the scan gets longer than P3.38's 15 s (user
+# decision, Session 52: 2 of 6 timed out at 15 s on the dry run); with
+# SCAN_CONCURRENCY reads at once, two waves fit inside SCAN_DEADLINE_S.
+SCAN_READ_TIMEOUT_S = 30.0
 MEMO_KEY = "_literal_scan_memo"
 
 _PUBLISHED_REASONS = {
@@ -88,7 +92,8 @@ async def _one(lid: str, literal: str, memo: dict, sem: asyncio.Semaphore, on_ch
         # The index holds no text of it (Session 50: no instrument held with
         # text ever answered "No sections found"), so P3.38's read.
         got = await published_text.read_published_text(
-            lid, on_chunk=on_chunk, timing_collector=timing_collector, tool_name=tool_name)
+            lid, on_chunk=on_chunk, timing_collector=timing_collector, tool_name=tool_name,
+            read_timeout=SCAN_READ_TIMEOUT_S)
         if got.get("status") == pt.OK:
             return ls.outcome_from_text(got.get("text"), literal, url=got.get("url") or "",
                                         version=got.get("version") or "")
