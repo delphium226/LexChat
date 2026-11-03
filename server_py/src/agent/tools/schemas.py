@@ -190,8 +190,9 @@ WORKER_TOOLS = [
             # 12 of the instruments defining "shop" per stored 6341 answer. One
             # corpus-wide section search, filtered in code to the rows that
             # define the term, reached more than any stored run on every turn
-            # measured (`notes/batch13_G.md`). Not offered to the quick-lookup
-            # Worker (`QUICK_LOOKUP_WITHHELD_TOOLS`).
+            # measured (`notes/batch13_G.md`). Offered to the quick-lookup
+            # Worker too since the P3.34 follow-up (see
+            # `QUICK_LOOKUP_WITHHELD_TOOLS`).
             "description": (
                 "Find where a term is defined in legislation: searches all legislation in the "
                 "index once and lists the provisions that put the term in quotation marks "
@@ -832,10 +833,17 @@ _WESTMINSTER_TOOL_NAMES = {t["function"]["name"] for t in WESTMINSTER_TOOLS}
 # instrument this Worker searches within (`instrument_lookup.
 # section_search_lookup`). The research Workers keep the tool.
 #
-# P3.34: nor `find_definitions` (the row left this Worker to be decided
-# separately): its prompt asks for one search and 2-5 sentences, which a list
-# of up to 40 defining instruments does not fit.
-QUICK_LOOKUP_WITHHELD_TOOLS = ("get_legislation_text", "find_definitions")
+# P3.34 withheld `find_definitions` here too at first, and its follow-up
+# offers it (user decision, Session 52). Measured as an A/B on the stored
+# definition-list turns at n=3 (`wave5_p334q_A` withheld, `wave5_p334q_B`
+# offered, nothing else changed): reference definers cited 2,2,2 -> 3,3,3 of 5
+# on 6384 t1 and 1,1,1 -> 3,3,2 of 28 on 6341 t2, no definition cited that the
+# tool's result did not hold, and no call on the control (6409 t1). This
+# Worker's prompt does not name the tool (the B arm had no
+# `_DEFINITIONS_TOOL_LINE`); the tool's description is all it is told. The
+# answers gave 2 to 4 of the 30 as "several", so the footer says how many the
+# search found (`search_scope._definitions_found`).
+QUICK_LOOKUP_WITHHELD_TOOLS = ("get_legislation_text",)
 
 
 def withheld_tool_result(name: str) -> str:
