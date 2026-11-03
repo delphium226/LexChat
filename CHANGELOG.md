@@ -18,7 +18,9 @@ where each row carries its evidence and acceptance.
 
 ## Unreleased
 
-Pre-pilot fixes on `fix/prepilot-defects` (Session 52), not yet cut:
+## 2026.11.1 — 2026-11-03
+
+Ninth cut of the pre-pilot fixes (Session 52; merge of `fix/prepilot-defects`). Rollback point: `v2026.10.5`.
 
 Research:
 - **The research step now sees every note the system adds to a long result**
