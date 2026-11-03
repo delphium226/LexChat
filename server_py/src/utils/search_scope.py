@@ -87,6 +87,7 @@ from .instrument_lookup import (
 )
 from .published_text import published_footer_clause, published_limb
 from .literal_scan import SCAN_ENTRY, scan_footer, scan_limb
+from .placeholder_ids import is_placeholder_id, split_placeholders, unidentified_phrase
 from .removal_effects import (
     PROVISION_KEY,
     QUALIFIED_KEY,
@@ -411,6 +412,17 @@ def legislation_search_note(
     )
 
 
+# P4.28: the one sentence a section search of a placeholder-id record adds.
+# Its rows' `uri`s are built on the placeholder, so none of them links to the
+# instrument; the title the search row gave is all that names it.
+_UNIDENTIFIED_SECTION_CLAUSE = (
+    " The index holds no identifiable reference for this instrument: the "
+    "legislation_id you searched by is a placeholder, not a citation. Cite it by "
+    "its title only, never by that id or by a uri in these rows, which do not "
+    "link to it."
+)
+
+
 def section_search_note(args: dict, data: Any) -> str:
     """The scope block appended to every `search_legislation_sections` result.
 
@@ -436,6 +448,11 @@ def section_search_note(args: dict, data: Any) -> str:
     query = str(args.get("query") or "").strip()
     query_phrase = f'"{query[:200]}"' if query else "(no query given)"
     leg = str(args.get("legislation_id") or "").strip() or "this instrument"
+    # P4.28: a placeholder id is LEX's key for the record, not a reference, so
+    # the block does not repeat it, and says how the instrument may be cited.
+    unidentified = ""
+    if is_placeholder_id(leg):
+        leg, unidentified = "this instrument", _UNIDENTIFIED_SECTION_CLAUSE
 
     results = d.get("results")
     shown = len(results) if isinstance(results, list) else d.get("returned")
@@ -455,7 +472,7 @@ def section_search_note(args: dict, data: Any) -> str:
             "it. Do NOT state that a provision, power or duty is absent from "
             f"{leg} on the strength of this result, and do NOT speculate about "
             f"why a provision was not returned.{enabling}{_RELATION_ROUTE_CLAUSE} If you report something "
-            "as not found, say what was searched for and in which instrument.]"
+            f"as not found, say what was searched for and in which instrument.{unidentified}]"
         )
     return (
         f"\n\n[SEARCH SCOPE — 0 provisions of {leg} matched {query_phrase}. That "
@@ -2097,8 +2114,14 @@ def _title_markers(results: Any) -> list:
         m = _TITLE_STATUS_MARKER.search(str(r.get("title") or ""))
         if not m:
             continue
+        lid = str(r.get("legislation_id") or "")
+        # P4.28: a placeholder id names nothing; the row's title, which carries
+        # the marker, is what identifies it. Not yet seen: none of the 324
+        # stored placeholder rows carried a marker.
+        if is_placeholder_id(lid):
+            lid = f'"{str(r.get("title") or "").strip()[:58]}"'
         out.append((
-            str(r.get("legislation_id") or "")[:60],
+            lid[:60],
             m.group(1).lower(),
             m.group(2).strip()[:40],
         ))
@@ -3310,6 +3333,10 @@ def _section_budget_held(rows: list) -> dict:
     out = {}
     for e in rows:
         lid = _sb_lid(e)
+        # P4.28: these sentences name the instrument, so a placeholder id
+        # takes the plain limb, which counts it.
+        if is_placeholder_id(lid):
+            continue
         if lid and lid not in out and isinstance(e.get("provisions"), int):
             out[lid] = {"provisions": e["provisions"], "units": list(e.get("units") or [])}
     return out
@@ -3356,6 +3383,10 @@ def _plain_section_budget_limb(rows: list) -> str:
                 ids.append(lid)
         n = len(rows)
         which = ", ".join(ids[:4]) or "an instrument"
+        # P4.28: a placeholder id is counted, never named.
+        refs, held = split_placeholders(ids)
+        if held:
+            which = ", ".join(refs[:4] + [unidentified_phrase(len(held))])
         return (
             f"Searching within {which} was cut short: this step used its limit of "
             + (f"{limit} rounds of " if limit else "")
@@ -3471,9 +3502,14 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
             lid = (e.get("legislation_id") or "").strip()
             if lid and lid not in ids:
                 ids.append(lid)
+        # P4.28: a placeholder id is counted, never named.
+        refs, held = split_placeholders(ids)
+        named = ", ".join(refs[:8])
+        if held:
+            named = ", ".join(refs[:8] + [unidentified_phrase(len(held), noun=False)])
         lines.append(
             f"Searched within {len(ids) or len(sections)} instrument(s) for "
-            f"specific provisions: {', '.join(ids[:8]) or 'n/a'}"
+            f"specific provisions: {named or 'n/a'}"
             + (" (ranked extracts, not the full contents of any of them)")
         )
     # P2.7. Next to the searches it qualifies: the list above is not everything
@@ -4759,6 +4795,14 @@ def section_scope_footer(searches: Optional[list]) -> str:
         where = _and_join(ids[:_MAX_NAMED_INSTRUMENTS])
         if len(ids) > _MAX_NAMED_INSTRUMENTS:
             where += f" and {len(ids) - _MAX_NAMED_INSTRUMENTS} more"
+        # P4.28: a placeholder id is counted, never named to the legal
+        # professional.
+        refs, held = split_placeholders(ids)
+        if held:
+            parts = refs[:_MAX_NAMED_INSTRUMENTS]
+            if len(refs) > _MAX_NAMED_INSTRUMENTS:
+                parts.append(f"{len(refs) - _MAX_NAMED_INSTRUMENTS} more")
+            where = _and_join(parts + [unidentified_phrase(len(held))])
         terms, listed = _listed_terms(e.get("query") for e in rows)
         head = (f"for this reply the text of {where or 'an instrument'} in the "
                 "legislation index was searched" + (f" for {listed}" if terms else ""))
