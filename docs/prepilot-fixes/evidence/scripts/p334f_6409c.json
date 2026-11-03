@@ -1,0 +1,12 @@
+{
+ "session_id": "p334f_6409c",
+ "base": "6409",
+ "note": "P3.34 follow-up control (Session 52): session 6409's turn 1 ('is the Act in force?'), in Conversational under 'legislation_only', a question about no definition. Run once on each arm of the quick-lookup find_definitions test. Pass: the tool is not called where find_definitions is offered, and the answer is no worse than the other arm. Turn text is taken from the export by index and is never stored here.",
+ "turns": [
+  {
+   "from_turn": 1,
+   "research_mode": "legislation_only",
+   "chat_mode": "conversational"
+  }
+ ]
+}

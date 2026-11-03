@@ -1,0 +1,12 @@
+{
+  "session_id": "p334f_6384c",
+  "base": "6384",
+  "note": "P3.34 follow-up (prepared Session 52, not run): session 6384's turn 1 only, in Conversational chat mode under the session's filters, as every stored 6384 t1 replay ran it (6 runs, baseline to wave2_p21, 0 of the 5 reference definers linked). Run once on the branch (find_definitions withheld from the quick-lookup Worker) and once with it offered (QUICK_LOOKUP_WITHHELD_TOOLS without it), n=3 each. Graded: reference definers named or linked of 5 (batch 13 G gt.json B_strict); every instrument stated to define the term is one whose retrieved text does; the answer says the list is one search, not every definition; tool called or not. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 1,
+      "research_mode": "legislation_only",
+      "chat_mode": "conversational"
+    }
+  ]
+}

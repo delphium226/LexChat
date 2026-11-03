@@ -1,0 +1,12 @@
+{
+  "session_id": "p334f_6341c",
+  "base": "6341",
+  "note": "P3.34 follow-up (prepared Session 52, not run): session 6341's turn 2 only, in Conversational chat mode under 'legislation_and_case_law' (as wave5_p17 ran it; the turn asks for case-law definitions too). Arms and grading as p334f_6384c, against the 28 reference definers of 'shop'. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 2,
+      "research_mode": "legislation_and_case_law",
+      "chat_mode": "conversational"
+    }
+  ]
+}
