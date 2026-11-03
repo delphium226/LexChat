@@ -270,6 +270,25 @@ def _resolvable(lid: str) -> bool:
     return bool(_RESOLVABLE_ID.match(lid or ""))
 
 
+# An id that is a placeholder, not a reference: the index's OCR'd records
+# carry "[UNCLEAR: possible reference 'ni/1944/80']", "[UNCLEAR: no document
+# reference provided]" or "ukpga/1855/27 [UNCLEAR: local act reference]" in
+# `legislation_id`, and their `uri` is built on the same text (0 of 5,020 raw
+# rows in `evidence/seam/s52/p334f/measure_unclear.txt` carried a uri that
+# differs), so nothing in the row identifies the instrument. A "possible
+# reference" inside the bracket is the OCR model's guess, not the index's.
+# Such a row is never listed: it is counted (`unidentified`), because a
+# legal professional can neither cite nor check it, and the bracket would
+# otherwise be read out as an id. An id that is unresolvable but is a
+# citation ("S.I. 1949 No. 404") is still listed, as `reference_unclear`.
+_PLACEHOLDER_ID = re.compile(r"[\[\]]|\bUNCLEAR\b", re.I)
+
+
+def is_placeholder_id(lid: Any) -> bool:
+    """True where a legislation_id is an OCR placeholder, not a reference."""
+    return bool(_PLACEHOLDER_ID.search(str(lid or "")))
+
+
 def _stated_extent(row: dict) -> list:
     ext = row.get("extent")
     if isinstance(ext, str):
@@ -378,6 +397,7 @@ def build_result(rows: Any, term: Any, *, jurisdiction: Optional[str] = None,
     found: dict = {}        # instrument key -> {"row", "text", "m", "also": [...]}
     longer: dict = {}       # (instrument key, phrase key) -> {...}
     removed: set = set()
+    unidentified: set = set()
     for row in items:
         text = str(row.get("text") or "")
         lid = _short_id(row.get("legislation_id") or "")
@@ -397,6 +417,10 @@ def build_result(rows: Any, term: Any, *, jurisdiction: Optional[str] = None,
         if jurisdiction and not _jurisdiction_keeps(_stated_extent(row), jurisdiction, lid):
             if m:
                 removed.add(key)
+            continue
+        if is_placeholder_id(lid):
+            if m:
+                unidentified.add(key)
             continue
         if m:
             if key in found:
@@ -423,6 +447,8 @@ def build_result(rows: Any, term: Any, *, jurisdiction: Optional[str] = None,
         out["reference_unclear"] = unclear
     if removed:
         out["removed_by_filters"] = len(removed)
+    if unidentified:
+        out["unidentified"] = len(unidentified)
     out["longer_terms_count"] = len(longs)
 
     def _render(cap: int, n_listed: int, n_longer: int) -> dict:
@@ -474,6 +500,19 @@ def parse_result(raw: Any) -> Optional[dict]:
     return d
 
 
+def _unidentified_sentence(d: dict, term: str) -> str:
+    """The note's sentence on rows left out because their id is a
+    placeholder. "" when there were none, so the note is otherwise unchanged."""
+    k = int(d.get("unidentified") or 0)
+    if not k:
+        return ""
+    return (f" {k} further provision(s) put \"{term}\" in quotation marks followed by a "
+            "defining word in records the index holds without an identifiable reference "
+            "(scanned historical documents whose reference was not read); they are not "
+            "listed and cannot be cited: you may say how many there were, never what they "
+            "are.")
+
+
 def definitions_note(raw_result: Any) -> str:
     """The block appended to a `find_definitions` result, for the Worker.
 
@@ -495,11 +534,14 @@ def definitions_note(raw_result: Any) -> str:
     head = f"{opening}, read the {rows} {provisions} that matched it best"
     if not rows:
         head = f"{opening}, and it returned no provisions"
+    unidentified = _unidentified_sentence(d, term)
     if not n:
         none_kept = (f", and found none that puts \"{term}\" in quotation marks followed by a "
-                     "defining word") if rows else ""
+                     "defining word" + (" in an instrument the index identifies"
+                                        if unidentified else "")) if rows else ""
         return (
-            head + none_kept + ". That is a statement about this one search, NOT evidence "
+            head + none_kept + "." + unidentified + " That is a statement about this one "
+            "search, NOT evidence "
             "that no legislation defines the term: say what was searched, and look for a "
             "definition in the instruments the question concerns with "
             "search_legislation_sections.]"
@@ -536,7 +578,7 @@ def definitions_note(raw_result: Any) -> str:
         "define it there, listed in the order the search returned them, each with its defining "
         "words verbatim (cut at a word where long), its provision link and the extent the index "
         "states ('not stated' where it states none, which does not mean the instrument applies "
-        f"everywhere).{more}{juris}{unclear}{longer} You MAY state that each listed instrument defines "
+        f"everywhere).{more}{juris}{unclear}{unidentified}{longer} You MAY state that each listed instrument defines "
         "the term in the words quoted, citing its provision link. This is one search, not a "
         "census: a definition worded another way, inside a very long provision, or outside the "
         "provisions read may be missing, so never call this list every definition of the term, "

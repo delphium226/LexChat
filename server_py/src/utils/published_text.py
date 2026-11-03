@@ -536,14 +536,23 @@ def record_published(log: Optional[list], lid: str, kind: str, outcome: dict) ->
         status = outcome.get("status")
         if status not in (OK, NOT_PUBLISHED, PDF_ONLY, FAILED, LIMIT, EARLIER):
             return
-        log.append({
+        entry = {
             "tool": PUBLISHED_ENTRY,
             "legislation_id": lid[:60],
             "label": label_for(lid),
             "kind": kind,
             "status": status,
             "version": outcome.get("version") or "",
-        })
+        }
+        if status == OK:
+            # P4.26 follow-up: what a Sources rail entry for the instrument
+            # needs, from the read itself (`agent_shared._extract_published_
+            # instruments`), so the rail decision reads this record and never
+            # the text handed to the Worker, which may be a summary.
+            entry["title"] = _clean(outcome.get("title"), 200)
+            entry["url"] = _clean(outcome.get("url")
+                                  or page_url(lid, outcome.get("version") or "current"), 160)
+        log.append(entry)
     except Exception:
         pass
 

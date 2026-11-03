@@ -1054,7 +1054,7 @@ def record_definitions(log: Optional[list], name: str, args: dict, data: Any) ->
             log.append({"tool": DEFINITIONS_ENTRY, "ok": False,
                         "term": str((args or {}).get("term") or "")[:80]})
             return
-        log.append({
+        entry = {
             "tool": DEFINITIONS_ENTRY, "ok": True,
             "term": str(d.get("term") or "")[:80],
             "query": str(d.get("query") or "")[:120],
@@ -1065,7 +1065,11 @@ def record_definitions(log: Optional[list], name: str, args: dict, data: Any) ->
             "removed": int(d.get("removed_by_filters") or 0),
             "longer": int(d.get("longer_terms_count") or 0),
             "jurisdiction": str(d.get("jurisdiction") or "")[:40],
-        })
+        }
+        # P3.34 follow-up: records whose id is a placeholder, never listed.
+        if d.get("unidentified"):
+            entry["unidentified"] = int(d.get("unidentified") or 0)
+        log.append(entry)
     except Exception:
         pass
 
@@ -1086,14 +1090,21 @@ def _definitions_limb(log: Optional[list]) -> str:
         if not e.get("ok"):
             parts.append(f'for "{term}" it did not complete, so it established nothing')
             continue
+        unidentified = (f", and {e.get('unidentified')} more in records the index does not "
+                        "identify, not listed" if e.get("unidentified") else "")
         if not e.get("count"):
             read = (f"none of the {e.get('rows')} provision(s) it read defines the term in "
                     "quotation marks" if e.get("rows") else "the search returned no provisions")
+            if unidentified:
+                read = (f"none of the {e.get('rows')} provision(s) it read defines the term in "
+                        "quotation marks in an instrument the index identifies (there were "
+                        f"{e.get('unidentified')} in records the index does not identify, "
+                        "not listed)")
             parts.append(f'for "{term}" {read}, which is not evidence that no legislation '
                          "defines it")
             continue
         bits = [f'for "{term}" {e.get("count")} instrument(s) define the term in quotation marks '
-                f'among the {e.get("rows")} provisions it read']
+                f'among the {e.get("rows")} provisions it read{unidentified}']
         if e.get("listed", 0) < e.get("count", 0):
             bits.append(f"{e.get('listed')} of them listed to the research agent")
         if e.get("not_stated"):

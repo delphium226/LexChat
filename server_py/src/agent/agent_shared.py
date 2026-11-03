@@ -214,6 +214,53 @@ def _extract_listed_instruments(name: str, args: dict, raw_result_str: str,
         logger.debug(f"[Sources] Listed-instrument extraction skipped for '{name}': {e}")
 
 
+# P4.26 follow-up: how a rail entry names the version P3.38 read.
+_PUBLISHED_VERSION_SUB = {
+    "made": "text as made, read from legislation.gov.uk",
+    "enacted": "text as enacted, read from legislation.gov.uk",
+}
+
+
+def _extract_published_instruments(entries: Optional[list], listed: list) -> None:
+    """P4.26 follow-up: an instrument whose text P3.38 read from
+    legislation.gov.uk (`published_text_route`), appended to `listed`, so
+    lever R can put it in the rail where the answer names it. Never raises.
+
+    Decided on the scope record alone (`published_text.record_published`): an
+    entry whose read returned text (status ok), with the title legislation.gov.uk
+    gave and the URL of the version read. Never a parse of the tool result,
+    which past the threshold or the context budget is a summary. A read that
+    returned no text (not published, a scanned PDF, failed, the request's
+    limit) gets no entry: nothing showed the instrument exists at that id. Nor
+    does `earlier`: the run's first read added it."""
+    if not entries:
+        return
+    try:
+        from ..utils.published_text import OK, PUBLISHED_ENTRY
+
+        have = {s.get("_lid") for s in listed}
+        for e in entries:
+            if not isinstance(e, dict) or e.get("tool") != PUBLISHED_ENTRY:
+                continue
+            lid = str(e.get("legislation_id") or "")
+            if e.get("status") != OK or not lid or lid in have:
+                continue
+            have.add(lid)
+            title = str(e.get("title") or "").strip()
+            listed.append({
+                "_lid": lid,
+                "kind": _legislation_kind(lid),
+                "title": title or lid,
+                "cite": lid,
+                "url": str(e.get("url") or "") or f"https://www.legislation.gov.uk/{lid}",
+                "sub": _PUBLISHED_VERSION_SUB.get(
+                    str(e.get("version") or ""),
+                    "current text, read from legislation.gov.uk"),
+            })
+    except Exception as ex:
+        logger.debug(f"[Sources] Published-text instrument skipped: {ex}")
+
+
 def _legislation_kind(legislation_id: str) -> str:
     """Derive a human-readable source kind from the legislation_id path prefix."""
     prefix = legislation_id.split("/")[0].lower()
@@ -1334,8 +1381,10 @@ async def run_worker_tool(
             lookup follows it. None (the default) changes nothing.
         listed_accumulator: If provided, the instruments a lookup (held) or a
             made-under list returned are appended to it from the raw result,
-            on a memo hit too (P4.26, `_extract_listed_instruments`): lever R's
-            candidates, apart from `source_accumulator`. None changes nothing.
+            on a memo hit too (P4.26, `_extract_listed_instruments`), and so is
+            an instrument whose text P3.38 read from legislation.gov.uk, from
+            the read's scope record (`_extract_published_instruments`): lever
+            R's candidates, apart from `source_accumulator`. None changes nothing.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -1467,6 +1516,9 @@ async def run_worker_tool(
             # P3.38: and what the read from legislation.gov.uk recorded.
             if search_log is not None and hit.get("published_entries"):
                 search_log.extend(dict(e) for e in hit["published_entries"])
+            # P4.26 follow-up: and the instrument that read returned, for lever R.
+            if listed_accumulator is not None:
+                _extract_published_instruments(hit.get("published_entries"), listed_accumulator)
             # P3.51: and what the result's made-under block named.
             if search_log is not None and hit.get("made_under_entries"):
                 search_log.extend(dict(e) for e in hit["made_under_entries"])
@@ -1992,6 +2044,10 @@ async def run_worker_tool(
                 search_log.append({"tool": "enabling_power", "legislation_id": _plid[:60],
                                    "stated": True, "source": "legislation_gov_uk"})
     _published_entries = (list(search_log[_log_start:]) if search_log is not None else [])
+    # P4.26 follow-up: an instrument whose text that read returned is offered
+    # to lever R, from the record the route just wrote.
+    if listed_accumulator is not None:
+        _extract_published_instruments(_published_entries, listed_accumulator)
 
     from .provider_factory import get_summarise_threshold, get_tool_result_threshold
     # P3.50: a judgment passes whole up to its own cap (`CASE_LAW_WHOLE_CHARS`).
