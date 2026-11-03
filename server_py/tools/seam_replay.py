@@ -548,24 +548,42 @@ def lawyer_words_fn(rev: Optional[str] = None):
     return _module_at(rev, LAWYER_WORDS_PATH, "src.utils").with_lawyer_words
 
 
+def filter_note_fn(rev: Optional[str] = None):
+    """`quick_lookup_filter_note` as the code at `rev` has it (default: the
+    working tree), or None at a revision before P3.14, whose quick-lookup
+    Worker was told nothing of the filters."""
+    if not rev:
+        from src.prompts import quick_lookup_filter_note
+        return quick_lookup_filter_note
+    if "def quick_lookup_filter_note" not in _file_at(rev, "server_py/src/prompts.py"):
+        return None
+    return _module_at(rev, "server_py/src/prompts.py", "src").quick_lookup_filter_note
+
+
 def worker_user_message(doc: dict, turn: dict, dg: dict, rev: Optional[str] = None,
-                        lawyer_words: bool = True) -> str:
+                        lawyer_words: bool = True, filter_note: bool = True,
+                        on_date: Optional[date] = None) -> str:
     """The Worker's user message as `run_worker_agent` builds it (P3.52 (c)):
     the recorded brief, then the turn's question through the product's own
     `with_lawyer_words`. `replay.py` sends the turn's question verbatim as the
     request's last user message, so it is what `_cache_key_query` held. P3.7's
-    lookup block is not part of it (`--first-round` rebuilds that).
+    lookup block is not part of it (`--first-round` rebuilds that). Then
+    (P3.14) the quick-lookup Worker's filter note, through the product's own
+    `quick_lookup_filter_note` at `rev`, with `on_date` as its today.
 
-    `lawyer_words=False` is the before side of (c): the brief alone."""
+    `lawyer_words=False` is the before side of (c): the brief alone.
+    `filter_note=False` is the before side of P3.14."""
     brief = dg.get("brief") or ""
     if not brief:
         return turn.get("question") or ""
-    fn = lawyer_words_fn(rev) if lawyer_words else None
-    if fn is None:
-        return brief
     cfg = _cfg_for(doc, turn)
-    return fn(brief, turn.get("question") or "", cfg.get("_research_mode"),
-              cfg.get("_chat_mode"))
+    fn = lawyer_words_fn(rev) if lawyer_words else None
+    text = brief if fn is None else fn(
+        brief, turn.get("question") or "", cfg.get("_research_mode"), cfg.get("_chat_mode"))
+    note_fn = filter_note_fn(rev) if filter_note else None
+    if note_fn is not None:
+        text += note_fn(cfg.get("_research_mode") or "legislation_only", cfg, on_date)
+    return text
 
 
 def worker_first_round_messages(doc: dict, turn: dict, delegation: int = 1,
@@ -737,7 +755,8 @@ def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
         {"role": "system", "content": system},
         # P3.52 (c): the lawyer's words as the code at `at_rev` (or the working
         # tree) appended them; the brief alone at a revision before (c).
-        {"role": "user", "content": worker_user_message(doc, turn, dg, rev=at_rev)},
+        {"role": "user", "content": worker_user_message(doc, turn, dg, rev=at_rev,
+                                                        on_date=on_date)},
     ]
     n = 0
     for rnd in rounds:
@@ -1218,6 +1237,8 @@ def _cfg_for(doc: dict, turn: dict) -> dict:
         "_legislation_type": f.get("legislation_type"),
         "_year_from": f.get("year_from"),
         "_year_to": f.get("year_to"),
+        "_date_from": f.get("date_from"),
+        "_date_to": f.get("date_to"),
     }
 
 

@@ -955,6 +955,121 @@ def _filter_constraint_block_for_mode(research_mode: str, cfg: dict) -> str:
     return build_filter_constraint_block(cfg)
 
 
+# FIX_PLAN P3.14: what the quick-lookup (conversational) Worker is told about
+# the legal professional's research filters. `get_worker_system_prompt` returns that
+# Worker's prompt from an early return, so the ACTIVE RESEARCH FILTERS block
+# above reaches the research Workers and never this one. The filters were
+# always ENFORCED (the executor reads them from the request config); what the
+# Worker lacked was knowing that a filter, not the index or the law, narrowed
+# its search: B5's shape. Measured in the stored runs, 6357 (Acts only) told
+# the legal professional an SSI was "unable to locate ... in the available legislation
+# database" (wave1 rep1 t2) and "the legislation index does not hold" it
+# (wave2 rep1 t1).
+#
+# **It goes in the Worker's USER message, after the brief (and after P3.52
+# (c)'s block), not in its system prompt, deliberately.** P2.4 measured a
+# rule block appended to this Worker's system prompt moving its reports to
+# bullets (0 of 9 to 5 of 9) and cutting case-law links that reached the
+# answer (7 of 15 to 2 of 13), because the chat-mode Manager rewrites a
+# bulleted report and drops the link round each case name (Session 14).
+# The research block is that shape (a header and a bulleted list). Here the
+# system prompt stays byte-identical whatever the filters, and the note is a
+# bracketed statement of facts beside the brief, where P3.52 (c) showed text
+# reaches this Worker.
+#
+# **Only filters that can exclude something are named.** An upper year bound
+# at or after the current year, or a case-law end date on or after today,
+# excludes nothing; the replay harness sends `year_to: 2026` on 6370, 6375 and
+# 6406 (P3.3's and P3.2's measurements), so naming it would move those
+# payloads for no reason, and a note naming an inert filter invites the model
+# to blame it. Legislation filters are named only to a Worker with the
+# legislation tools, the case-law date range only to one with the case-law
+# tools. With nothing to name the note is "" and the message is unchanged.
+#
+# No "answer for X" clause (user decision, Session 52): the note states
+# what the filters do and nothing about which jurisdiction to answer for;
+# that stays with the prompt and the brief.
+#
+# Screened against the answer detectors (`test_quick_lookup_filters.py`),
+# since a Worker can echo it. Never raises (Invariant 5).
+QUICK_LOOKUP_FILTERS_LABEL = "RESEARCH FILTERS"
+
+_QL_LEGISLATION_MODES = ("legislation_only", "legislation_and_case_law")
+_QL_CASE_LAW_MODES = ("case_law_only", "legislation_and_case_law")
+
+_QL_TYPE_PHRASES = {
+    "primary": "legislation searches return Acts only (primary legislation)",
+    "secondary": "legislation searches return statutory instruments only (secondary legislation)",
+    "draft": "legislation searches return draft statutory instruments only",
+}
+
+
+def _ql_jurisdiction_phrase(jurisdiction: str) -> str:
+    if jurisdiction == "uk_wide":
+        return ("legislation search results are kept only where their stated extent is the "
+                "United Kingdom, so legislation that applies across the UK without stating it "
+                "is left out")
+    label = _JURISDICTION_LABELS.get(jurisdiction, jurisdiction)
+    return (f"legislation search results whose stated extent leaves out {label} are removed "
+            f"(most results state no extent and are kept, so a result is not thereby shown "
+            f"to apply in {label})")
+
+
+def quick_lookup_filter_note(research_mode: str, cfg: dict, today=None) -> str:
+    """The note appended to the quick-lookup Worker's user message naming the
+    research filters that can exclude something ("" where none applies, or
+    for any other Worker). `today` (a `date`) decides which upper bounds are
+    inert; the product passes none (today)."""
+    try:
+        if not cfg or cfg.get("_chat_mode") != "conversational":
+            return ""
+        if research_mode in ("parliamentary_records", "westminster_records"):
+            return ""
+        from datetime import date
+        today = today or date.today()
+        facts = []
+        if research_mode in _QL_LEGISLATION_MODES:
+            lt = cfg.get("_legislation_type")
+            if lt:
+                facts.append(_QL_TYPE_PHRASES.get(
+                    lt, f"legislation searches return {lt} legislation only"))
+            jur = cfg.get("_jurisdiction")
+            if jur:
+                facts.append(_ql_jurisdiction_phrase(jur))
+            yf = cfg.get("_year_from")
+            yt = cfg.get("_year_to")
+            if yt and int(yt) >= today.year:
+                yt = None
+            if yf and yt:
+                facts.append(f"legislation searches return legislation from {yf} to {yt} only")
+            elif yf:
+                facts.append(f"legislation searches return legislation from {yf} onwards only")
+            elif yt:
+                facts.append(f"legislation searches return legislation up to {yt} only")
+        if research_mode in _QL_CASE_LAW_MODES:
+            df = cfg.get("_date_from")
+            dt = cfg.get("_date_to")
+            if dt and str(dt)[:10] >= today.isoformat():
+                dt = None
+            if df and dt:
+                facts.append(f"case-law searches return judgments dated {df} to {dt} only")
+            elif df:
+                facts.append(f"case-law searches return judgments dated from {df} only")
+            elif dt:
+                facts.append(f"case-law searches return judgments dated up to {dt} only")
+        if not facts:
+            return ""
+        return (
+            f"\n\n[{QUICK_LOOKUP_FILTERS_LABEL} — set by the legal professional and applied by the system "
+            "to every search you make: " + "; ".join(facts) + ". Something the brief asks "
+            "about that your searches do not return may have been left out by these filters: "
+            "if so, say that the filters left it out, never that it is unavailable or does not "
+            "exist.]"
+        )
+    except Exception:
+        return ""
+
+
 # FIX_PLAN P3.20: the case-law wording when `search_case_law` also searches
 # the Scottish Courts and Tribunals Service's published judgments
 # (`scts_caselaw_enabled`). Every site that says Find Case Law is the only
