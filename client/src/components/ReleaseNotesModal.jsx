@@ -11,6 +11,11 @@ import Modal from './ui/Modal';
 
 const RELEASES = [
   [
+    '2026.11.1',
+    '3 November 2026',
+    'Every statutory definition of a term, which listed instruments contain a word, a court\'s own limit on its decision, revocations marked in chat answers, and a sources list that matches each answer',
+  ],
+  [
     '2026.10.5',
     '30 October 2026',
     'Notes on what a search could not show now reach the research; lists say how many were checked; future commencement dates, pre-1963 legislation and missed judgments stated accurately',
@@ -111,8 +116,8 @@ function LegislationNotes({ botName, scottishJudgments }) {
           If case law was not searched, the answer says so. If it was, the answer says a search can miss a judgment.
         </Item>
         <Item title="Summaries keep to their source.">
-          When {botName} condenses a long document, it no longer adds conclusions, legislation or case citations the
-          document does not contain.
+          When {botName} condenses a long document, it no longer adds conclusions, legislation, case citations or
+          amounts the document does not contain.
         </Item>
         <Item title="A point of interpretation is given as a reading, not as settled law.">
           {botName} does not say a general rule applies, such as an interpretation Act or a doctrine, unless it found
@@ -121,7 +126,11 @@ function LegislationNotes({ botName, scottishJudgments }) {
         <Item title="The research now sees every note it is given.">
           With the AI model in use, the notes {botName} adds to a search result (what the search could not show, which
           instrument made a change, text read from legislation.gov.uk) were silently dropped before the model read
-          them. They now reach it.
+          them. They now reach it, and a long result no longer has its notes cut off the end.
+        </Item>
+        <Item title="Your filters are taken into account in Conversational mode too.">
+          If a research filter left something out, {botName} says the filter left it out, not that the legislation is
+          missing from its database.
         </Item>
         <Item title={'No more "You are absolutely right" before anything is checked.'} />
       </Section>
@@ -168,6 +177,11 @@ function LegislationNotes({ botName, scottishJudgments }) {
           It used to drop most search results silently. A question that names no jurisdiction is answered for
           Scotland; a question about the UK is answered for each nation, saying where the law differs.
         </Item>
+        <Item title="Every statutory definition of a term.">
+          Ask for the statutory definitions of a word and {botName} searches all legislation once for provisions that
+          define it, in every mode. The line under the answer says how many instruments it found, so a reply that names
+          a few is not mistaken for the whole set.
+        </Item>
         <Item title="Search results carry each instrument's own short summary,">
           which often says when it came into force or what it was made under.
         </Item>
@@ -197,7 +211,16 @@ function LegislationNotes({ botName, scottishJudgments }) {
         </Item>
         <Item title="Questions about the whole list.">
           If you ask which of the listed instruments contain or do something, the answer says how many it actually
-          checked and that the rest were not, rather than presenting a few examples as the whole list.
+          checked and that the rest were not, rather than presenting a few examples as the whole list. If you ask which
+          contain a particular word or symbol, such as "£", every listed instrument is read in full and the answer
+          says which contain it.
+        </Item>
+        <Item title="Revocations in chat answers.">
+          A chat answer that names an instrument recorded as revoked says so, even when the question was about
+          something else in it.
+        </Item>
+        <Item title="Instruments made under a section the answer cites">
+          are listed at the end of a chat answer, with revocations marked.
         </Item>
         <Item title="Long lists.">
           Where more than 40 instruments are found, the list shown leads with those not revoked in whole.
@@ -230,6 +253,14 @@ function LegislationNotes({ botName, scottishJudgments }) {
         <Item title="Judgments read in full.">
           A judgment of up to about 60,000 characters is now read whole rather than summarised first.
         </Item>
+        <Item title="A court's own limit on its decision.">
+          Where a judgment confines its decision to particular facts, the answer gives the court's own words and the
+          paragraph, rather than stating the decision more widely than the court did.
+        </Item>
+        <Item title="Appeals matched correctly.">
+          A first-instance decision is linked to its appeal only when the parties match, not because two cases share a
+          common word.
+        </Item>
         {scottishJudgments ? (
           <Item title="Scottish judgments.">
             {botName} now also searches the judgments published by the Scottish Courts and Tribunals Service, so a
@@ -257,7 +288,18 @@ function LegislationNotes({ botName, scottishJudgments }) {
         </Item>
         <Item title="The sources list matches the answer.">
           It shows the sources the answer relies on, each by its title, rather than every search result. Instruments
-          the answer names carry the links the research found.
+          the answer names carry the links the research found, including those found by a direct lookup, in a "made
+          under" list or read from legislation.gov.uk. An answer with no sources of its own no longer shows the
+          previous answer's. A scanned historical record whose reference could not be read no longer appears as a
+          broken link.
+        </Item>
+        <Item title="A change of setting is marked in the conversation.">
+          When you change the research type or the mode, a line in the conversation shows where the change took
+          effect.
+        </Item>
+        <Item title="The Jurisdiction filter says what it keeps:">
+          legislation that applies there, UK-wide legislation included, and legislation whose extent is not stated.
+          Case law is not filtered by jurisdiction.
         </Item>
         <Item title="No blank or lost replies.">
           If the AI service fails part-way, {botName} recovers sooner and tells you what happened, rather than leaving
@@ -269,7 +311,9 @@ function LegislationNotes({ botName, scottishJudgments }) {
         <Item title="Deep Research steps build on each other.">
           Each step is handed what the earlier steps found, instead of searching for it again.
         </Item>
-        <Item title="One search line, not two,">under each answer.</Item>
+        <Item title="One search line, not two,">
+          under each answer, naming one list of the change records consulted.
+        </Item>
         <Item title="Know what it searches.">
           Settings, then Data Sources, now describes exactly what {botName} searches and the limits of each source.
           These release notes are under Settings too, with the version and build your server runs.
