@@ -11,6 +11,7 @@ import {
   CheckIcon,
 } from './ui/icons';
 import { formatRelativeTime } from '../utils/format';
+import { CHAT_MODE_LABELS } from '../constants/research';
 
 // Per-chat research indicator. `active` reuses .lex-thinking-dot — the same dot
 // the transcript status line uses — so the sidebar and the transcript read as
@@ -227,9 +228,11 @@ export default function Sidebar({
                 outline: 'none',
               }}
             >
-              <option value="conversational">Conversational</option>
-              {features.research_mode_enabled && <option value="research">Research</option>}
-              {features.deep_research_mode_enabled && <option value="deep_research">Deep Research</option>}
+              <option value="conversational">{CHAT_MODE_LABELS.conversational}</option>
+              {features.research_mode_enabled && <option value="research">{CHAT_MODE_LABELS.research}</option>}
+              {features.deep_research_mode_enabled && (
+                <option value="deep_research">{CHAT_MODE_LABELS.deep_research}</option>
+              )}
             </select>
           </div>
 

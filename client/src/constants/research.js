@@ -79,6 +79,26 @@ export const getLatestSession = mode =>
 export const getSessionFilterLabel = mode =>
   mode === WESTMINSTER_MODE ? 'Parliament' : 'Session';
 
+// The two mode controls' labels, as the UI shows them: the research type (the
+// Filters button > Research filters > Research type) and the chat mode (the
+// sidebar's Mode menu). One copy, read by the filter dialog, the sidebar, the
+// context pills and the in-thread mode-change marker (P4.9), and kept in step
+// with the server's `RESEARCH_MODE_LABELS` / `CHAT_MODE_LABELS`
+// (server_py/src/utils/mode_change.py; `modeChange.test.js` checks the two).
+export const RESEARCH_TYPE_OPTIONS = [
+  { value: 'legislation_only', label: 'Legislation only' },
+  { value: 'case_law_only', label: 'Case law only' },
+  { value: 'legislation_and_case_law', label: 'Legislation & case law' },
+];
+
+export const RESEARCH_TYPE_LABELS = Object.fromEntries(RESEARCH_TYPE_OPTIONS.map(o => [o.value, o.label]));
+
+export const CHAT_MODE_LABELS = {
+  conversational: 'Conversational',
+  research: 'Research',
+  deep_research: 'Deep Research',
+};
+
 export const JURISDICTION_OPTIONS = [
   { value: null, label: 'All jurisdictions' },
   { value: 'england_and_wales', label: 'England & Wales' },

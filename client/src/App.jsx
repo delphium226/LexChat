@@ -14,6 +14,8 @@ import ChatMessage from './components/ChatMessage';
 import { LexMark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
 import { railTurn } from './utils/railTurn';
+import { modeChangeMarkers } from './utils/modeChange';
+import ModeChangeMarker from './components/ModeChangeMarker';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginModal from './components/LoginModal';
 import AdminPortal from './pages/AdminPortal';
@@ -30,9 +32,11 @@ import ResearchFiltersModal from './components/ResearchFiltersModal';
 import Composer from './components/Composer';
 import Sidebar from './components/Sidebar';
 import {
+  CHAT_MODE_LABELS,
   HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
+  RESEARCH_TYPE_LABELS,
   getRecordTypeOptions,
   getSessionFilterLabel,
   getSessionOptions,
@@ -197,12 +201,7 @@ function AppContent() {
 
   // ── Derived ──────────────────────────────────────────────────
 
-  const researchModeLabel =
-    {
-      legislation_only: 'Legislation only',
-      case_law_only: 'Case law only',
-      legislation_and_case_law: 'Legislation & case law',
-    }[researchMode] || 'Legislation only';
+  const researchModeLabel = RESEARCH_TYPE_LABELS[researchMode] || RESEARCH_TYPE_LABELS.legislation_only;
 
 
   // Has this thread already had end-of-session feedback? Nothing on the chat
@@ -331,6 +330,16 @@ function AppContent() {
   const isHolyrood = botMode === 'parliamentary_records';
   const isWestminster = botMode === 'westminster_records';
   const isParliament = isHolyrood || isWestminster;
+
+  // P4.9: where the thread says the research type or the chat mode changed,
+  // from the modes each stored answer ran under. Legislation bot only: on the
+  // parliamentary bots the research type is fixed, and Conversational and
+  // Research run the same Manager and Worker prompts, so a marker would announce a
+  // change that does not change the research.
+  const modeMarkers = useMemo(
+    () => (isParliament ? new Map() : modeChangeMarkers(messages)),
+    [messages, isParliament]
+  );
 
   // The correct session/Parliament default depends on which bot this is, which is
   // only known once /api/bot-info resolves — apply it then, and drop any persisted
@@ -607,12 +616,7 @@ function AppContent() {
             // 1. Mode — always the first pill
             chips.push({
               icon: <ScalesIcon />,
-              label:
-                chatMode === 'conversational'
-                  ? 'Conversational'
-                  : chatMode === 'deep_research'
-                    ? 'Deep Research'
-                    : 'Research',
+              label: CHAT_MODE_LABELS[chatMode] || CHAT_MODE_LABELS.research,
             });
 
             // 2. Region
@@ -788,6 +792,7 @@ function AppContent() {
                   if (msg.role === 'tool') return null;
                   return (
                     <React.Fragment key={msg.id ?? idx}>
+                    <ModeChangeMarker parts={modeMarkers.get(idx)} />
                     <ChatMessage
                       message={msg}
                       onResend={() => {
