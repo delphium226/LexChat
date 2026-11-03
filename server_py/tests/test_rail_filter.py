@@ -328,12 +328,12 @@ async def _run_worker(monkeypatch, report, research_mode="legislation_only"):
         "_chat_mode": "conversational", "model": "test-model", "_tool_memo_enabled": False,
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False, results_bounded=False):
         return json.dumps(_search(3))
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, executor,
                         on_chunk=None, emit_tool_details=False, timing_collector=None,
-                        worker_call=False):
+                        worker_call=False, results_bounded=False):
         await executor("search_legislation", {"query": "widget"})
         return {"role": "assistant", "content": report}
 

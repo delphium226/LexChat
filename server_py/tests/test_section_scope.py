@@ -313,12 +313,12 @@ async def _turn(monkeypatch, worker_calls, messages=None, delegations=1,
         "model": "test-model", "_tool_memo_enabled": False,
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False, results_bounded=False):
         return json.dumps(_fake_result(name, args))
 
     async def worker_chat_loop(messages, model, cancel_event, num_ctx, tools,
                                executor, on_chunk=None, emit_tool_details=False,
-                               timing_collector=None, worker_call=False):
+                               timing_collector=None, worker_call=False, results_bounded=False):
         for name, args in worker_calls:
             await executor(name, args)
         return {"role": "assistant", "content": (
@@ -433,7 +433,7 @@ def _dr_worker(results):
 
 async def _synthesis(messages, model, cancel_event, num_ctx, tools, tool_executor,
                      on_chunk=None, emit_tool_details=False, timing_collector=None,
-                     worker_call=False):
+                     worker_call=False, results_bounded=False):
     return {"role": "assistant", "content": "Integrated report."}
 
 

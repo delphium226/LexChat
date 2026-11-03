@@ -198,6 +198,7 @@ async def chat_loop(
     worker_call: bool = False,
     manager_call: bool = False,
     manager_report_in_hand: Optional[Callable[[], bool]] = None,
+    results_bounded: bool = False,
 ) -> dict:
     """Core ReAct loop using OpenRouter's OpenAI-compatible streaming API.
 
@@ -212,6 +213,11 @@ async def chat_loop(
     worker report is in hand, a heavy empty is not retried and an idle timeout
     is retried once, not twice. Forwarded the same way. Every other caller's
     payload and retry are unchanged.
+
+    `results_bounded` (P1.8) is set by `run_worker_agent` alone: its executor
+    (`run_worker_tool`) bounds each result on the tool's own output, so the
+    last-resort cap is skipped and no code-written block is cut. Forwarded
+    through the recursion.
     """
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
@@ -529,9 +535,9 @@ async def chat_loop(
 
         next_messages = [*messages, assistant_message]
 
-        # Last-resort safety net (`cap_tool_result`): results above the
-        # summarisation threshold are summarised (and capped) by
-        # run_worker_tool before reaching here; per tool since P3.50.
+        # Last-resort safety net (`cap_tool_result`), per tool since P3.50;
+        # skipped for an executor that bounds its own results (P1.8:
+        # `results_bounded`, the Worker's loop, via run_worker_tool).
         from .provider_factory import cap_tool_result
 
         async def _run_tool(tc):
@@ -545,7 +551,10 @@ async def chat_loop(
             except json.JSONDecodeError:
                 func_args = {}
             result = await tool_executor(func_name, func_args)
-            result = cap_tool_result(func_name, result, timing_collector, "[OpenRouter]")
+            # P1.8: a Worker's results are bounded by `run_worker_tool`, on
+            # the tool's own output; cut here, the cut fell on code text.
+            if not results_bounded:
+                result = cap_tool_result(func_name, result, timing_collector, "[OpenRouter]")
             return tc["id"], func_name, result
 
         # P2.7: each task copies this context at creation, so every call in
@@ -588,6 +597,7 @@ async def chat_loop(
             worker_call=worker_call,
             manager_call=manager_call,
             manager_report_in_hand=manager_report_in_hand,
+            results_bounded=results_bounded,
         )
 
     return assistant_message

@@ -46,7 +46,10 @@ from ..utils.instrument_lookup import legislation_id as lookup_legislation_id
 from .tools.executor import fetch_provision_list, fetch_text_with_schedules
 from ..utils.instrument_lookup import LOOKUP_TOOL
 from ..utils.made_under import MADE_UNDER_TOOL, made_under_note
-from ..utils.search_scope import record_made_under
+from ..utils.definitions import DEFINITIONS_TOOL, definitions_note
+from ..utils.placeholder_ids import is_placeholder_id
+from ..utils.literal_scan import search_scan_note
+from ..utils.search_scope import record_made_under, record_definitions
 from ..utils.discovery_budget import (
     legislation_budget_blocks,
     legislation_stop_message,
@@ -91,6 +94,7 @@ from .tools import (
     _PARLIAMENT_TOOL_NAMES,
 )
 from .tools.caselaw import named_case_note
+from ..utils.court_limits import court_limit_note
 
 logger = logging.getLogger("agent")
 
@@ -140,6 +144,125 @@ def _extract_sources_from_tool(name: str, args: dict, raw_result_str: str, accum
         logger.debug(f"[Sources] Extraction skipped for '{name}': {e}")
 
 
+# P4.26: the lookup states that establish the instrument is in the index (an
+# instrument "not held", a failed or invalid lookup gets no rail entry: none of
+# them shows the instrument exists at the number asked).
+_LISTED_LOOKUP_STATES = frozenset({"held", "held_without_text"})
+
+
+def _extract_listed_instruments(name: str, args: dict, raw_result_str: str,
+                                listed: list) -> None:
+    """P4.26: the instruments a `lookup_legislation` (held, with or without
+    text) or a `find_instruments_made_under` list returned, appended to
+    `listed`, one entry per `legislation_id`. Never raises.
+
+    Kept apart from the source accumulator on purpose. These entries reach the
+    rail only at the answer seam, through lever R (`readmit_answer_sources`),
+    and only where the ANSWER names the instrument: a made-under list holds up
+    to 40, and the Worker seam's keep test reads the report, which commonly
+    lists every one. Apart, they also leave the accumulator's counts as they
+    were (`sources_extracted`, the halt and lost reports' "N source(s) had been
+    retrieved", `source_filter_fallback`). No excerpt, for P3.5's reason: the
+    tool established the instrument, it did not read its text."""
+    if name not in (LOOKUP_TOOL, MADE_UNDER_TOOL):
+        return
+    try:
+        data = json.loads(raw_result_str)
+    except Exception:
+        return
+    if not isinstance(data, dict):
+        return
+    try:
+        have = {s.get("_lid") for s in listed}
+
+        def _add(lid: str, title: str, url: str, sub: str = "") -> None:
+            # P4.28: never a placeholder id (`_extract_sources_inner`).
+            if not lid or lid in have or is_placeholder_id(lid):
+                return
+            have.add(lid)
+            title = title.strip()
+            # The made-under list cuts a title at 110 characters with an
+            # ellipsis. A cut title names nothing (`named_in` refuses the head
+            # of a longer title) and shows no year, so the entry takes its id,
+            # which P4.24's fill replaces with the record's full title.
+            if title.endswith("…"):
+                title = ""
+            entry = {
+                "_lid": lid,
+                "kind": _legislation_kind(lid),
+                "title": title or lid,
+                "cite": lid,
+                "url": url or f"https://www.legislation.gov.uk/{lid}",
+            }
+            if sub:
+                entry["sub"] = sub
+            listed.append(entry)
+
+        if name == LOOKUP_TOOL:
+            if data.get("status") in _LISTED_LOOKUP_STATES:
+                _add(str(data.get("legislation_id") or ""), str(data.get("title") or ""),
+                     str(data.get("url") or ""))
+            return
+        if data.get("status") != "found":
+            return
+        prov = str(data.get("provision") or "").replace("/", " ").strip()
+        act = str(data.get("matched_act") or "").strip()
+        sub = f"recorded as made under {prov} of {act}" if prov and act else ""
+        for inst in data.get("instruments") or []:
+            if isinstance(inst, dict):
+                _add(str(inst.get("legislation_id") or ""), str(inst.get("title") or ""),
+                     str(inst.get("url") or ""), sub)
+    except Exception as e:
+        logger.debug(f"[Sources] Listed-instrument extraction skipped for '{name}': {e}")
+
+
+# P4.26 follow-up: how a rail entry names the version P3.38 read.
+_PUBLISHED_VERSION_SUB = {
+    "made": "text as made, read from legislation.gov.uk",
+    "enacted": "text as enacted, read from legislation.gov.uk",
+}
+
+
+def _extract_published_instruments(entries: Optional[list], listed: list) -> None:
+    """P4.26 follow-up: an instrument whose text P3.38 read from
+    legislation.gov.uk (`published_text_route`), appended to `listed`, so
+    lever R can put it in the rail where the answer names it. Never raises.
+
+    Decided on the scope record alone (`published_text.record_published`): an
+    entry whose read returned text (status ok), with the title legislation.gov.uk
+    gave and the URL of the version read. Never a parse of the tool result,
+    which past the threshold or the context budget is a summary. A read that
+    returned no text (not published, a scanned PDF, failed, the request's
+    limit) gets no entry: nothing showed the instrument exists at that id. Nor
+    does `earlier`: the run's first read added it."""
+    if not entries:
+        return
+    try:
+        from ..utils.published_text import OK, PUBLISHED_ENTRY
+
+        have = {s.get("_lid") for s in listed}
+        for e in entries:
+            if not isinstance(e, dict) or e.get("tool") != PUBLISHED_ENTRY:
+                continue
+            lid = str(e.get("legislation_id") or "")
+            if e.get("status") != OK or not lid or lid in have:
+                continue
+            have.add(lid)
+            title = str(e.get("title") or "").strip()
+            listed.append({
+                "_lid": lid,
+                "kind": _legislation_kind(lid),
+                "title": title or lid,
+                "cite": lid,
+                "url": str(e.get("url") or "") or f"https://www.legislation.gov.uk/{lid}",
+                "sub": _PUBLISHED_VERSION_SUB.get(
+                    str(e.get("version") or ""),
+                    "current text, read from legislation.gov.uk"),
+            })
+    except Exception as ex:
+        logger.debug(f"[Sources] Published-text instrument skipped: {ex}")
+
+
 def _legislation_kind(legislation_id: str) -> str:
     """Derive a human-readable source kind from the legislation_id path prefix."""
     prefix = legislation_id.split("/")[0].lower()
@@ -153,10 +276,14 @@ def _legislation_kind(legislation_id: str) -> str:
 
 
 def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list) -> None:
+    # P4.28: a placeholder `legislation_id` ("[UNCLEAR: ...]") never becomes a
+    # rail source, from any branch below: its uri is built on the same text and
+    # links nowhere, and a "possible reference" in it is an OCR guess. The
+    # Worker still reads the record; only the rail and the links refuse it.
     if name == "search_legislation":
         for item in data.get("results", []):
             lid = item.get("legislation_id") or ""
-            if not lid:
+            if not lid or is_placeholder_id(lid):
                 continue
             if any(s.get("_lid") == lid for s in accumulator):
                 continue
@@ -174,7 +301,7 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "cite": lid,
             })
 
-    elif name == "search_legislation_sections":
+    elif name == "search_legislation_sections" and not is_placeholder_id(args.get("legislation_id")):
         lid = args.get("legislation_id") or ""
         sections = data.get("sections") or data.get("results") or []
         for sec in sections[:1]:  # enrich with first matching section only
@@ -201,7 +328,7 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                     "url": data.get("url") or "",
                 })
 
-    elif name == "get_legislation_text":
+    elif name == "get_legislation_text" and not is_placeholder_id(args.get("legislation_id")):
         lid = args.get("legislation_id") or ""
         content = data.get("content") or data.get("text") or ""
         excerpt = content[:300] if content else ""
@@ -236,7 +363,8 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
             if not isinstance(group, dict) or group.get("self"):
                 continue
             rel_lid = group.get("legislation_id") or ""
-            if not rel_lid or any(s.get("_lid") == rel_lid for s in accumulator):
+            if (not rel_lid or is_placeholder_id(rel_lid)
+                    or any(s.get("_lid") == rel_lid for s in accumulator)):
                 continue
             effect = group.get("type_of_effect") or "change"
             subject = data.get("legislation_id") or args.get("legislation_id") or ""
@@ -247,6 +375,29 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "sub": f"recorded as {effect} for provisions of {subject}",
                 "cite": rel_lid,
                 "url": group.get("url") or "",
+            })
+
+    elif name == DEFINITIONS_TOOL:
+        # P3.34. Each instrument the definitions search found defining the
+        # term, so an answer naming one can show it in the rail. No excerpt,
+        # for P3.5's reason above: `_source_is_used` would then keep every
+        # one of up to 40 whether or not the answer names it. No entry for an
+        # instrument without a working link (`reference_unclear`).
+        term = data.get("term") or ""
+        for d in data.get("definitions") or []:
+            if not isinstance(d, dict) or not d.get("url"):
+                continue
+            lid = d.get("legislation_id") or ""
+            if not lid or any(s.get("_lid") == lid for s in accumulator):
+                continue
+            prov = d.get("provision") or ""
+            accumulator.append({
+                "_lid": lid,
+                "kind": _legislation_kind(lid),
+                "title": d.get("title") or lid,
+                "sub": f'defines "{term}"' + (f" ({prov})" if prov else ""),
+                "cite": lid,
+                "url": d.get("url") or "",
             })
 
     elif name == "search_case_law":
@@ -848,6 +999,75 @@ async def published_text_route(
     return pt.published_block(lid, kind, outcome, how, body, total_chars=len(text)), outcome
 
 
+async def literal_scan_route(
+    name: str,
+    raw_result,
+    query: str,
+    search_log: Optional[list],
+    parent_on_chunk: Optional[Callable] = None,
+    timing_collector=None,
+    retrieved_urls: Optional[set] = None,
+    context_budget: Optional[dict] = None,
+    pending_chars: int = 0,
+) -> tuple:
+    """P3.57: a literal string searched for, by code, in every instrument of a
+    made-under list. Returns ``(block_for_the_worker, scope_entries)``.
+
+    ``("", [])`` unless all three hold: this is a `find_instruments_made_under`
+    result that found instruments and lists every one of them (40 or fewer,
+    `literal_scan.MAX_SCANNED`); and the Worker's brief, or the legal
+    professional's latest message (`_cache_key_query`, which
+    `with_lawyer_words` also hands the Worker), asks for a literal string
+    (`literal_scan.detect_literal`). Then each listed instrument's text is read
+    (`agent/tools/literal_scan.py`) and searched, and the Worker gets one
+    compact block (`literal_scan.scan_block`), sized within what remains of
+    its context budget; the texts themselves never reach it. The provision
+    URLs it names join `retrieved_urls`, so the Worker may cite them (P1.6).
+    Exceptions propagate: the caller fails soft.
+    """
+    from ..utils import literal_scan as ls
+    if name != MADE_UNDER_TOOL:
+        return "", []
+    try:
+        d = json.loads(raw_result) if isinstance(raw_result, str) else dict(raw_result or {})
+    except (TypeError, ValueError):
+        return "", []
+    insts = d.get("instruments") if isinstance(d, dict) else None
+    if (not isinstance(insts, list) or d.get("status") != "found"
+            or not 0 < len(insts) == int(d.get("count") or 0) <= ls.MAX_SCANNED):
+        return "", []
+    cfg = get_request_provider_config() or {}
+    literal = ls.detect_literal(query, cfg.get("_cache_key_query") or "")
+    if not literal:
+        return "", []
+    ids = [str(i.get("legislation_id") or "") for i in insts if i.get("legislation_id")]
+    titles = {str(i.get("legislation_id")): str(i.get("title") or "")
+              for i in insts if i.get("legislation_id")}
+    from .tools.literal_scan import scan_instruments
+    outcomes = await scan_instruments(ids, literal, on_chunk=parent_on_chunk,
+                                      timing_collector=timing_collector)
+    # P3.57 follow-up: kept for the request, so a later section search of a
+    # scanned instrument for this string is told what the scan found there
+    # (`literal_scan.search_scan_note`), in this step or a later one.
+    ls.remember_scan(cfg, literal, outcomes)
+    limit = ls.BLOCK_MAX_CHARS
+    if context_budget is not None:
+        limit = max(2_000, min(limit, context_budget["limit"] - context_budget["used"]
+                               - pending_chars))
+    block = ls.scan_block(literal, ids, outcomes, titles, max_chars=limit)
+    if retrieved_urls is not None:
+        urls = [p.get("url") for o in outcomes.values() for p in (o.get("provisions") or [])]
+        harvest_legislation_urls(json.dumps({str(i): u for i, u in enumerate(urls) if u}),
+                                 into=retrieved_urls)
+    entry = ls.scan_entry(literal, ids, outcomes)
+    if search_log is not None:
+        search_log.append(entry)
+    logger.info("[Worker] Text scan by code of %d made-under instruments: found in %d, "
+                "not found in %d, not read %d", len(ids), len(entry["found"]),
+                len(entry["absent"]), len(entry["unread"]))
+    return block, [entry]
+
+
 async def _empty_search_text(args: dict, scope_note: str, result_suffix: str,
                              empty_search_lookup: Callable,
                              search_log: Optional[list]) -> tuple:
@@ -955,6 +1175,7 @@ async def made_under_sections_note(name: str, raw_result, search_log: Optional[l
     raises."""
     if name != "search_legislation_sections":
         return "", []
+    block, entries = "", []
     try:
         from ..utils.made_under import (
             handed_families, returned_section_families, section_families_block,
@@ -962,15 +1183,55 @@ async def made_under_sections_note(name: str, raw_result, search_log: Optional[l
         act, bases = returned_section_families(raw_result)
         done = handed_families(search_log)
         bases = [b for b in bases if (act, b) not in done]
-        if not act or not bases:
-            return "", []
-        from ..services.made_under_store import section_family_rows
-        rows, cov = await section_family_rows(act, bases)
-        if not rows:
-            return "", []
-        return section_families_block(act, bases, rows, cov)
+        if act and bases:
+            from ..services.made_under_store import section_family_rows
+            rows, cov = await section_family_rows(act, bases)
+            if rows:
+                block, entries = section_families_block(act, bases, rows, cov)
     except Exception:
+        block, entries = "", []
+    # P3.51 (A2, Session 52): a returned provision that inserts a section into
+    # another Act (s.8 of asp/2003/10 inserts s.33A into the Housing (Scotland)
+    # Act 1987) is keyed on the amended Act's section too, so the instruments
+    # made under the inserted section are listed. Its own block, after the
+    # returned sections'; "" wherever no returned row inserts a section the
+    # record can place. Fail-soft: a failure here leaves the block above.
+    try:
+        more, more_entries = await _inserted_families_note(raw_result, search_log, entries)
+        return block + more, entries + more_entries
+    except Exception:
+        return block, entries
+
+
+async def _inserted_families_note(raw_result, search_log: Optional[list], earlier: list) -> tuple:
+    """`(block, entries)` for the sections a section search's rows insert into
+    another Act, resolved to that Act through the made-under record
+    (`made_under_store.amended_act_id`); each family once per Worker run."""
+    from ..utils.made_under import handed_families, inserted_sections, section_families_block
+
+    found = inserted_sections(raw_result)
+    if not found:
         return "", []
+    from ..services.made_under_store import amended_act_id, section_family_rows
+
+    done = handed_families(list(search_log or []) + list(earlier or []))
+    by_act: dict = {}
+    for kind, ref, base, sec, by in found:
+        act = await amended_act_id(kind, ref, f"section/{sec}")
+        if not act or (act, base) in done:
+            continue
+        e = by_act.setdefault(act, {"bases": [], "inserted": []})
+        if base not in e["bases"]:
+            e["bases"].append(base)
+        e["inserted"].append((sec, by))
+    block, entries = "", []
+    for act, e in by_act.items():
+        rows, cov = await section_family_rows(act, e["bases"])
+        if rows:
+            b, en = section_families_block(act, e["bases"], rows, cov, inserted=e["inserted"])
+            block += b
+            entries += en
+    return block, entries
 
 
 def _has_scottish_list(result) -> bool:
@@ -1043,6 +1304,34 @@ def _case_law_note_with_scottish(args: dict, result) -> str:
         return ""
 
 
+# P4.28: what the nudge adds to a row whose `legislation_id` is a placeholder.
+# The row is still listed: LEX takes the placeholder as the record's key (both
+# stored section searches made with one returned 10 provisions, and 6387 t2's
+# answer came from one), so dropping it would close the only route to that
+# text. It is marked so the Worker does not cite the id as a reference.
+_PLACEHOLDER_NUDGE_MARK = (
+    " — no identifiable reference: you may search within it by this "
+    "legislation_id, but cite it by its title only, never by this id or its url"
+)
+
+
+def phase2_nudge(id_pairs: list) -> str:
+    """The NEXT STEP note after a `search_legislation` result: the first five
+    `(legislation_id, title)` pairs to search within. "" for none."""
+    if not id_pairs:
+        return ""
+    id_lines = "\n".join(
+        f'  - legislation_id: "{lid}"  ({title})'
+        + (_PLACEHOLDER_NUDGE_MARK if is_placeholder_id(lid) else "")
+        for lid, title in id_pairs[:5]
+    )
+    return (
+        f"\n\n[NEXT STEP: Call search_legislation_sections with the relevant "
+        f"legislation_id(s) below to retrieve the actual legal text before "
+        f"composing your answer:\n{id_lines}]"
+    )
+
+
 async def run_worker_tool(
     name: str,
     args: dict,
@@ -1063,6 +1352,7 @@ async def run_worker_tool(
     result_suffix: str = "",
     provision_fetches: Optional[dict] = None,
     empty_search_lookup: Optional[Callable] = None,
+    listed_accumulator: Optional[list] = None,
 ) -> str:
     """Execute a single Worker tool call and return the (possibly summarised) result.
 
@@ -1124,6 +1414,12 @@ async def run_worker_tool(
             Where the index lacks the instrument or its text, the empty-search
             note says so and the text code read from legislation.gov.uk on that
             lookup follows it. None (the default) changes nothing.
+        listed_accumulator: If provided, the instruments a lookup (held) or a
+            made-under list returned are appended to it from the raw result,
+            on a memo hit too (P4.26, `_extract_listed_instruments`), and so is
+            an instrument whose text P3.38 read from legislation.gov.uk, from
+            the read's scope record (`_extract_published_instruments`): lever
+            R's candidates, apart from `source_accumulator`. None changes nothing.
     """
     activity_id = uuid.uuid4().hex[:8]
 
@@ -1152,7 +1448,7 @@ async def run_worker_tool(
     if search_budget is not None:
         if legislation_budget_blocks(search_budget, name):
             record_budget_stop(search_log, name, args, search_budget)
-            refusal = (legislation_stop_message(search_budget),
+            refusal = (legislation_stop_message(search_budget, name),
                        "Discovery budget spent", "Search limit reached")
         elif section_budget_blocks(search_budget, name, args):
             # Batch 8 A2: where code has read this instrument's complete
@@ -1200,6 +1496,8 @@ async def run_worker_tool(
             # extraction on the stored RAW result against this step's accumulator.
             if source_accumulator is not None:
                 _extract_sources_from_tool(name, args, hit["raw"], source_accumulator)
+            if listed_accumulator is not None:
+                _extract_listed_instruments(name, args, hit["raw"], listed_accumulator)
             # Same for the retrieved-URL set: the memo saves the fetch, not the
             # provenance. A step reusing a memoised retrieval has still retrieved
             # those provisions and must be allowed to cite them.
@@ -1248,9 +1546,14 @@ async def run_worker_tool(
             # P3.7: and a memoised lookup is still this step's lookup. A model
             # repeating the lookup code ran for it is served from here.
             record_lookup(search_log, name, args, hit["raw"])
+            # P3.34: and a memoised definitions search is still this step's.
+            record_definitions(search_log, name, args, hit["raw"])
             # P3.38: and what the read from legislation.gov.uk recorded.
             if search_log is not None and hit.get("published_entries"):
                 search_log.extend(dict(e) for e in hit["published_entries"])
+            # P4.26 follow-up: and the instrument that read returned, for lever R.
+            if listed_accumulator is not None:
+                _extract_published_instruments(hit.get("published_entries"), listed_accumulator)
             # P3.51: and what the result's made-under block named.
             if search_log is not None and hit.get("made_under_entries"):
                 search_log.extend(dict(e) for e in hit["made_under_entries"])
@@ -1258,6 +1561,9 @@ async def run_worker_tool(
             # the read that followed it.
             if search_log is not None and hit.get("empty_lookup_entries"):
                 search_log.extend(dict(e) for e in hit["empty_lookup_entries"])
+            # P3.57: and what code's text scan of the made-under list found.
+            if search_log is not None and hit.get("scan_entries"):
+                search_log.extend(dict(e) for e in hit["scan_entries"])
             if parent_on_chunk:
                 await call_chunk(parent_on_chunk, {"type": "tool_start", "tool": f"Worker: {name}", "id": activity_id})
                 await call_chunk(parent_on_chunk, {"type": "tool_end", "tool": f"Worker: {name}", "id": activity_id, "result": "Done (cached)"})
@@ -1348,6 +1654,9 @@ async def run_worker_tool(
     # Extract sources from the raw structured response BEFORE summarisation compresses it.
     if source_accumulator is not None:
         _extract_sources_from_tool(name, args, result, source_accumulator)
+    # P4.26: a lookup's or made-under list's instruments, for lever R only.
+    if listed_accumulator is not None:
+        _extract_listed_instruments(name, args, result, listed_accumulator)
 
     # P1.6 (B14): record every legislation.gov.uk URL this retrieval returned,
     # from the RAW response. "Did the research retrieve this provision" and "was
@@ -1583,16 +1892,7 @@ async def run_worker_tool(
             # carries, on 1.7% of rows, and the one a lawyer must not miss.
             scope_note += currency_note(args, raw_data)
             record_currency(search_log, name, args, raw_data)
-            if id_pairs:
-                id_lines = "\n".join(
-                    f'  - legislation_id: "{lid}"  ({title})'
-                    for lid, title in id_pairs[:5]
-                )
-                phase2_note = (
-                    f"\n\n[NEXT STEP: Call search_legislation_sections with the relevant "
-                    f"legislation_id(s) below to retrieve the actual legal text before "
-                    f"composing your answer:\n{id_lines}]"
-                )
+            phase2_note = phase2_nudge(id_pairs)
         except Exception:
             phase2_note = (
                 "\n\n[NEXT STEP: Call search_legislation_sections with the legislation_id "
@@ -1652,6 +1952,28 @@ async def run_worker_tool(
         # P3.31: the reverse question, answered from the made-under record.
         enabling_note = made_under_note(raw_result)
         record_made_under(search_log, raw_result)
+    # P3.57: where the question asks for a literal string, code searches the
+    # text of every listed instrument for it. Self-gated (the tool, a whole
+    # list of 40 or fewer, a literal detected); fail-soft (Invariant 5): on any
+    # failure the made-under result is exactly as it was.
+    scan_note, _scan_entries = "", []
+    if name == MADE_UNDER_TOOL:
+        try:
+            scan_note, _scan_entries = await literal_scan_route(
+                name, raw_result, query, search_log, parent_on_chunk=parent_on_chunk,
+                timing_collector=timing_collector, retrieved_urls=retrieved_urls,
+                context_budget=context_budget, pending_chars=len(result) + len(enabling_note))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("[Worker] Text scan of a made-under list failed", exc_info=True)
+            scan_note, _scan_entries = "", []
+    # P3.34: what the definitions search read and kept, for the Worker (the
+    # block) and for the Manager's limb and the footer (the record). From the
+    # RAW result, which is also what the Worker receives: it is never
+    # summarised (below). Self-gated on the tool name.
+    definitions_block = definitions_note(raw_result) if name == DEFINITIONS_TOOL else ""
+    record_definitions(search_log, name, args, raw_result)
     # P3.31, the forward question: where the record read here carries no
     # recital (0 of 28 SSIs at `/legislation/text`, P2.3), the made-under
     # record may hold the instrument's as-made preamble. Only the permitting
@@ -1748,6 +2070,10 @@ async def run_worker_tool(
                 search_log.append({"tool": "enabling_power", "legislation_id": _plid[:60],
                                    "stated": True, "source": "legislation_gov_uk"})
     _published_entries = (list(search_log[_log_start:]) if search_log is not None else [])
+    # P4.26 follow-up: an instrument whose text that read returned is offered
+    # to lever R, from the record the route just wrote.
+    if listed_accumulator is not None:
+        _extract_published_instruments(_published_entries, listed_accumulator)
 
     from .provider_factory import get_summarise_threshold, get_tool_result_threshold
     # P3.50: a judgment passes whole up to its own cap (`CASE_LAW_WHOLE_CHARS`).
@@ -1767,7 +2093,10 @@ async def run_worker_tool(
     # P3.31: the made-under list is bounded by construction (`MAX_LISTED`,
     # compact rows), and a summary that dropped instruments from it would
     # undo the tool, so it always reaches the Worker whole.
-    if (len(result) > _threshold or _over_budget) and name != MADE_UNDER_TOOL:
+    # P3.34: nor is the definitions list, for the same reason; it is sized
+    # under its own bound (`definitions.DEFINITIONS_WHOLE_CHARS`).
+    if (len(result) > _threshold or _over_budget) and name not in (MADE_UNDER_TOOL,
+                                                                   DEFINITIONS_TOOL):
         if _over_budget and len(result) <= _threshold:
             logger.info(
                 f"[Worker] Context budget reached "
@@ -1904,6 +2233,18 @@ async def run_worker_tool(
                 "result": result,
             })
 
+    # P1.8: the bound on this result, on the tool's OWN output and nothing
+    # else, here where that output ends and before any code-written text is
+    # appended to it. The Worker's chat loop no longer cuts what this returns
+    # (`results_bounded`): there the cut fell on the blocks below, not on the
+    # output (310 stored results, every cut in code text). A body within the
+    # limit, which a summarised one always is, is returned unchanged.
+    from .provider_factory import cap_tool_body
+    _bounded = cap_tool_body(name, result, timing_collector)
+    if _bounded is not result:
+        _audit_truncated = True
+        result = _bounded
+
     # P1.6 (B14): hand the provision URLs back after summarisation. A 32K
     # section retrieval summarises to ~3.5K of prose that names the sections and
     # carries no URLs at all, so the model — forbidden from inventing one and
@@ -1944,13 +2285,27 @@ async def run_worker_tool(
     # ("call search_legislation_sections with these ids") stays the last thing
     # the model reads on a productive search.
     result += scope_note
+    # P3.57 follow-up: a section search, for the scanned string, of an
+    # instrument a text scan by code earlier in this request read in full is
+    # told what the scan found, so a ranked search's non-return (and a
+    # summary saying "not present") is not reported as the instrument lacking
+    # it (`wave5_p357` 6382, 3 of 3). "" otherwise: no scan, another tool or
+    # instrument, a query for something else.
+    result += search_scan_note(name, args, get_request_provider_config())
+    result += definitions_block
     result += not_held
     result += published_note
     result += enabling_note
+    result += scan_note
     result += family_note
     result += schedules_line
     result += relations_note
     result += fetched_note
+    # P3.50 (A1): a passage in which the court limits its own decision, found
+    # in the RAW judgment text and appended after summarisation, so a summary
+    # cannot drop it. Self-gated on `get_case_law_text`; "" where the text
+    # holds no such passage, so every other result is unchanged.
+    result += court_limit_note(name, raw_result)
     result += phase2_note
     result += sp_phase2_note
     result += sp_committee_phase2_note
@@ -1975,6 +2330,9 @@ async def run_worker_tool(
         # P3.38: and what the code lookup after an empty section search recorded.
         if _empty_lookup_entries:
             tool_memo[memo_key]["empty_lookup_entries"] = _empty_lookup_entries
+        # P3.57: and what the text scan of a made-under list recorded.
+        if _scan_entries:
+            tool_memo[memo_key]["scan_entries"] = _scan_entries
 
     # Charged after the nudges are appended: what is counted is exactly what the
     # model receives, so the budget tracks the real context growth.

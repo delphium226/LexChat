@@ -87,7 +87,8 @@ def _request_memo() -> dict:
 
 
 async def _get(client: httpx.AsyncClient, url: str, call_id: str, on_chunk,
-               timing_collector, tool_name: str) -> tuple:
+               timing_collector, tool_name: str,
+               timeout: float = READ_TIMEOUT_S) -> tuple:
     """One GET. Returns ``(status, text_or_None, reason_or_None, absent)``;
     never raises. `absent` is True only when legislation.gov.uk itself
     answered that it has no such document. Recorded on the audit by size,
@@ -97,7 +98,7 @@ async def _get(client: httpx.AsyncClient, url: str, call_id: str, on_chunk,
     t0 = time.perf_counter()
     status, text, reason, absent, size = None, None, None, False, 0
     try:
-        async with client.stream("GET", url) as resp:
+        async with client.stream("GET", url, timeout=timeout) as resp:
             status = resp.status_code
             chunks = []
             async for chunk in resp.aiter_bytes():
@@ -139,7 +140,8 @@ async def _get(client: httpx.AsyncClient, url: str, call_id: str, on_chunk,
     return status, text, reason, absent
 
 
-async def _read(lid: str, call_id: str, on_chunk, timing_collector, tool_name: str) -> dict:
+async def _read(lid: str, call_id: str, on_chunk, timing_collector, tool_name: str,
+                timeout: float = READ_TIMEOUT_S) -> dict:
     """The outcome for one instrument, trying each route in order. A route
     legislation.gov.uk says it has no document for moves on to the next; any
     other failure ends the read, as failed."""
@@ -150,7 +152,7 @@ async def _read(lid: str, call_id: str, on_chunk, timing_collector, tool_name: s
         for i, path in enumerate(paths):
             status, text, reason, absent = await _get(
                 client, proxy_url(path), f"{call_id}-lgu-text-{i + 1}", on_chunk,
-                timing_collector, tool_name)
+                timing_collector, tool_name, timeout=timeout)
             if absent:
                 continue
             if reason:
@@ -175,6 +177,7 @@ async def read_published_text(
     on_chunk: Optional[Callable] = None,
     timing_collector=None,
     tool_name: str = "",
+    read_timeout: float = READ_TIMEOUT_S,
 ) -> dict:
     """legislation.gov.uk's text for `lid`, read through LEX's proxy, or an
     outcome saying why not. Memoised per request; at most
@@ -192,7 +195,8 @@ async def read_published_text(
             memo["reads"] += 1
             call_id = str(uuid.uuid4())
             task = asyncio.ensure_future(
-                _read(lid, call_id, on_chunk, timing_collector, tool_name or TOOL_LABEL))
+                _read(lid, call_id, on_chunk, timing_collector, tool_name or TOOL_LABEL,
+                      timeout=read_timeout))
             docs[lid] = task
         return dict(await asyncio.shield(task))
     except asyncio.CancelledError:

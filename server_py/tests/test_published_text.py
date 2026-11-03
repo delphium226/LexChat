@@ -505,7 +505,7 @@ async def _chunk(*a, **k):
 
 
 def _run(name, args, raw, monkeypatch, pages=None, search_log=None, memo=None,
-         urls=None, budget=None, cfg=None):
+         urls=None, budget=None, cfg=None, listed=None):
     """One `run_worker_tool` call with the executor stubbed to `raw` and the
     read served from `pages`."""
     from src.agent.agent_shared import run_worker_tool
@@ -518,7 +518,7 @@ def _run(name, args, raw, monkeypatch, pages=None, search_log=None, memo=None,
             return await run_worker_tool(name, dict(args), "is a widget fee set?", _chunk,
                                          "test-model", search_log=search_log,
                                          tool_memo=memo, retrieved_urls=urls,
-                                         context_budget=budget)
+                                         context_budget=budget, listed_accumulator=listed)
     return asyncio.run(go()), srv
 
 
@@ -797,3 +797,161 @@ def test_an_earlier_footer_still_parses_back_with_the_clause_after_it():
     msgs = [{"role": "assistant", "content": "Answer." + lookup_scope_footer(log)}]
     got = _earlier_lookups(msgs)
     assert [(e["label"], e["status"]) for e in got] == [("SSI 1901/3", "not_held")]
+
+
+# ---------------------------------------------------------------------------
+# P4.26 follow-up: an instrument whose text was read here gets a rail entry
+# where the answer names it (through `listed_sources` and lever R)
+# ---------------------------------------------------------------------------
+
+from src.agent.agent_core import listed_only, readmit_answer_sources  # noqa: E402
+from src.agent.agent_shared import (  # noqa: E402
+    _extract_listed_instruments,
+    _extract_published_instruments,
+)
+
+_MADE = {f"{LID}/made/data.xml": (200, _doc())}
+_LIST_KEYS = {"tool", "legislation_id", "label", "kind", "status", "version"}
+
+
+def test_the_record_of_a_read_with_text_carries_its_title_and_url():
+    log = []
+    pt.record_published(log, LID, pt.KIND_NOT_HELD,
+                        {"status": pt.OK, "version": "made", "title": "The Widget Order 1901",
+                         "url": "https://www.legislation.gov.uk/ssi/1901/3/made"})
+    pt.record_published(log, LID, pt.KIND_NOT_HELD, {"status": pt.OK, "version": "current"})
+    assert log[0]["title"] == "The Widget Order 1901"
+    assert log[0]["url"] == "https://www.legislation.gov.uk/ssi/1901/3/made"
+    assert log[1]["title"] == "" and log[1]["url"] == "https://www.legislation.gov.uk/ssi/1901/3"
+
+
+@pytest.mark.parametrize("status", [pt.NOT_PUBLISHED, pt.PDF_ONLY, pt.FAILED, pt.LIMIT,
+                                    pt.EARLIER])
+def test_the_record_of_any_other_outcome_is_unchanged(status):
+    log = []
+    pt.record_published(log, LID, pt.KIND_NOT_HELD, {"status": status, "title": "T", "url": "u"})
+    assert set(log[0]) == _LIST_KEYS
+
+
+def test_a_not_held_instrument_whose_text_was_read_is_listed(monkeypatch):
+    listed, log = [], []
+    _run("lookup_legislation", {}, _lookup("not_held"), monkeypatch, _MADE, log, listed=listed)
+    assert listed == [{"_lid": LID, "kind": "SI", "title": "The Widget Order 1901",
+                       "cite": LID, "url": "https://www.legislation.gov.uk/ssi/1901/3/made",
+                       "sub": "text as made, read from legislation.gov.uk"}]
+
+
+def test_an_empty_text_read_lists_its_instrument_too(monkeypatch):
+    listed = []
+    _run("get_legislation_text", {"legislation_id": LID},
+         json.dumps({"legislation": {"title": ""}, "full_text": "no text content available"}),
+         monkeypatch, _MADE, [], listed=listed)
+    assert [e["_lid"] for e in listed] == [LID]
+
+
+@pytest.mark.parametrize("pages", [
+    {},                                                                  # not published
+    {f"{LID}/made/data.xml": (500, "boom")},                             # failed
+    {f"{LID}/made/data.xml": (200, _doc(body=False)),                    # a scan only
+     f"{LID}/data.xml": (200, _doc(version="current", body=False))},
+])
+def test_a_read_that_returned_no_text_lists_nothing(monkeypatch, pages):
+    listed = []
+    out, _ = _run("lookup_legislation", {}, _lookup("not_held"), monkeypatch, pages, [],
+                  listed=listed)
+    assert "[PROVISION FETCHED BY CODE" in out and listed == []
+
+
+def test_a_summarised_read_is_listed_from_the_record_not_the_result(monkeypatch):
+    monkeypatch.setattr("src.agent.agent_shared.summarise_for_query",
+                        AsyncMock(return_value=("A summary.", False)))
+    monkeypatch.setattr("src.agent.provider_factory.get_summarise_threshold", lambda: 50)
+    listed = []
+    out, _ = _run("lookup_legislation", {}, _lookup("not_held"), monkeypatch, _MADE, [],
+                  listed=listed)
+    assert "below is a summary" in out
+    assert [(e["_lid"], e["title"]) for e in listed] == [(LID, "The Widget Order 1901")]
+
+
+def test_without_a_search_log_nothing_is_listed(monkeypatch):
+    """No record, no entry: the decision is the record's."""
+    listed = []
+    _run("lookup_legislation", {}, _lookup("not_held"), monkeypatch, _MADE, None, listed=listed)
+    assert listed == []
+
+
+def test_a_memo_hit_lists_it_again_for_the_reusing_step(monkeypatch):
+    memo, first, second = {}, [], []
+    cfg = {"_test": True, "_tool_memo_enabled": True}
+    _run("lookup_legislation", {"legislation_id": LID}, _lookup("not_held"), monkeypatch,
+         _MADE, [], memo=memo, cfg=cfg, listed=first)
+    assert memo, "the first call was memoised"
+    _run("lookup_legislation", {"legislation_id": LID}, _lookup("not_held"), monkeypatch,
+         {}, [], memo=memo, cfg=cfg, listed=second)
+    assert [e["_lid"] for e in first] == [e["_lid"] for e in second] == [LID]
+
+
+def test_the_result_is_the_same_with_or_without_the_accumulator(monkeypatch):
+    a, _ = _run("lookup_legislation", {}, _lookup("not_held"), monkeypatch, _MADE, [])
+    b, _ = _run("lookup_legislation", {}, _lookup("not_held"), monkeypatch, _MADE, [], listed=[])
+    assert a == b
+
+
+def _entry(status=pt.OK, lid=LID, version="made", title="The Widget Order 1901", url=None):
+    log = []
+    pt.record_published(log, lid, pt.KIND_NOT_HELD,
+                        {"status": status, "version": version, "title": title,
+                         "url": url or f"https://www.legislation.gov.uk/{lid}/{version}"})
+    return log
+
+
+def test_the_extraction_reads_ok_entries_only_and_never_raises():
+    listed = []
+    _extract_published_instruments(
+        [{"tool": "lookup", "legislation_id": "ssi/1901/9", "status": "ok"},
+         {"tool": pt.PUBLISHED_ENTRY, "legislation_id": "ssi/1901/8", "status": pt.EARLIER},
+         "not a dict", None] + _entry(lid="asp/1901/1", version="enacted", title=""),
+        listed)
+    assert [(e["_lid"], e["kind"], e["title"], e["sub"]) for e in listed] == [
+        ("asp/1901/1", "Act", "asp/1901/1", "text as enacted, read from legislation.gov.uk")]
+    for odd in (None, [], "x", [None], 5):
+        _extract_published_instruments(odd, listed)
+    _extract_published_instruments(_entry(lid="asp/1901/1"), listed)       # once per id
+    assert len(listed) == 1
+    cur = []
+    _extract_published_instruments(_entry(version="current"), cur)
+    assert cur[0]["sub"] == "current text, read from legislation.gov.uk"
+
+
+def test_a_held_lookup_entry_is_kept_over_the_read_entry():
+    listed = []
+    _extract_listed_instruments(
+        "lookup_legislation", {},
+        json.dumps({"tool": "lookup_legislation", "legislation_id": LID,
+                    "status": "held_without_text", "title": "The Widget Order 1901",
+                    "url": "https://www.legislation.gov.uk/ssi/1901/3"}), listed)
+    _extract_published_instruments(_entry(), listed)
+    assert len(listed) == 1 and "sub" not in listed[0]
+
+
+@pytest.mark.parametrize("answer,named", [
+    ("The Widget Order 1901 sets the fee.", True),
+    ("SSI 1901/3 sets the fee.", True),
+    ("The fee is five shillings.", False),
+    ("The Widget Order 1902 sets the fee.", False),
+])
+def test_lever_r_adds_it_only_where_the_answer_names_it(answer, named):
+    listed = []
+    _extract_published_instruments(_entry(), listed)
+    got = readmit_answer_sources([], listed_only(listed, []), answer, "legislation_only")
+    assert [s["cite"] for s in got] == ([LID] if named else [])
+    if named:
+        assert got[0]["url"] == "https://www.legislation.gov.uk/ssi/1901/3/made"
+        assert not any(k.startswith("_") for k in got[0])
+
+
+def test_lever_r_is_off_on_the_parliamentary_bot():
+    listed = []
+    _extract_published_instruments(_entry(), listed)
+    assert readmit_answer_sources([], listed_only(listed, []), "The Widget Order 1901.",
+                                  "parliamentary_records") == []

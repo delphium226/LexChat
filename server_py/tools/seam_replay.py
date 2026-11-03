@@ -81,6 +81,9 @@ from src.utils.research_halt import (  # noqa: E402
     lost_worker_report,
 )
 from src.utils.search_scope import strip_scope_blocks  # noqa: E402
+from src.utils.court_limits import (  # noqa: E402
+    COURT_LIMIT_HEAD, court_limits_from_result, dedupe_limits, restore_court_limits,
+)
 from src.utils.stopwatch import TimingCollector  # noqa: E402
 from src.utils.suggestions import extract_suggestions  # noqa: E402
 
@@ -190,6 +193,88 @@ def halts_from(turn: dict) -> list:
     return out
 
 
+_SCAN_HEAD = "[SEARCH SCOPE — text scan by code: "
+_SCAN_ID = r"[a-z]+/\d{4}/\d+"
+
+
+def scan_entry_from_block(block: str, listed: list) -> Optional[dict]:
+    """P3.57: the scope-record entry (`literal_scan.scan_entry`'s shape) a
+    stored made-under result's text scan block recorded, read back from the
+    block, which is the only place a run file keeps it. `listed` is the ids
+    the made-under result listed, in its order. None where there is no block."""
+    from src.utils import literal_scan as ls
+
+    start = block.find(_SCAN_HEAD)
+    if start < 0 or not listed:
+        return None
+    body = block[start:]
+    m = re.search(r'instruments contain "(.+?)", and a section search', body)
+    if not m:
+        return None
+    absent_m = re.search(r"\nNot found in the text read, \d+: ([^\n]*)\.\n", body)
+    absent = re.findall(_SCAN_ID, absent_m.group(1)) if absent_m else []
+    unread_m = re.search(r"\nNot read, \d+: ([^\n]*)\.\n", body)
+    unread = [u.split(" ", 1)[0] for u in unread_m.group(1).split("; ")] if unread_m else []
+    found = [i for i in listed if i not in absent and i not in unread]
+    return {"tool": ls.SCAN_ENTRY, "literal": m.group(1), "listed": len(listed),
+            "ids": list(listed), "found": found, "absent": [i for i in listed if i in absent],
+            "unread": [i for i in listed if i in unread]}
+
+
+def scan_searches_from(turn: dict) -> list:
+    """P3.57: the made-under and text-scan entries of the turn's scope record,
+    rebuilt from each recorded `find_instruments_made_under` result that
+    carries a scan block (the record itself is not stored). [] where no
+    delegation ran a scan, so a turn without one is rebuilt as before."""
+    from src.utils.search_scope import record_made_under
+
+    out: list = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for t in dg.get("tools") or []:
+            if t.get("name") != "find_instruments_made_under":
+                continue
+            try:
+                raw = json.loads(t.get("raw_result") or "")
+            except (TypeError, ValueError):
+                continue
+            listed = [str(i.get("legislation_id")) for i in (raw.get("instruments") or [])
+                      if isinstance(i, dict) and i.get("legislation_id")]
+            entry = scan_entry_from_block(t.get("final_result") or "", listed)
+            if entry:
+                record_made_under(out, t.get("raw_result") or "")
+                out.append(entry)
+    return out
+
+
+def court_limits_from(turn: dict) -> list:
+    """P3.50 (A1): the court's own limits in every judgment the turn's
+    delegations read, found by the product's detector in each recorded
+    `get_case_law_text` raw result, as `run_deep_research` collects them from
+    its steps' tool results (the recorded results predate the block, so they
+    are rebuilt from raw, never parsed)."""
+    out = []
+    for dg in (turn.get("audit") or {}).get("delegations", []):
+        for t in dg.get("tools") or []:
+            if t.get("name") == "get_case_law_text" and t.get("raw_result"):
+                out.extend(court_limits_from_result(t["raw_result"]))
+    return dedupe_limits(out)
+
+
+def rev_has_court_limits_block(rev: str) -> bool:
+    """Did the synthesis builder at `rev` hand over P3.50's limits block?"""
+    return "court_limits_block(" in _file_at(rev, "server_py/src/agent/agent_core.py")
+
+
+def strip_court_limits_block(body: str) -> str:
+    head = f"\n\n[{COURT_LIMIT_HEAD}S"
+    start = body.find(head)
+    if start < 0:
+        return body
+    close = f"[/{COURT_LIMIT_HEAD}S]"
+    end = body.find(close, start)
+    return body[:start] + (body[end + len(close):] if end >= 0 else "")
+
+
 def _prompt_constant_at(rev: str, name: str) -> str:
     """One string constant out of `src/prompts.py` at a git revision.
 
@@ -291,12 +376,17 @@ def synthesis_messages(doc: dict, turn: dict, without_fix: bool = False,
     messages = agent_core.build_synthesis_messages(
         turn.get("question") or "", turn.get("plan") or {}, findings,
         halts_from(turn), len(findings), research_mode=research_mode,
-        lost=lost_from(turn, apply_lost),
+        lost=lost_from(turn, apply_lost), court_limits=court_limits_from(turn),
+        # P3.57: the text scan's entries (and the list they scanned), so the
+        # synthesis gets P3.53's coverage note and the scan's note as sent.
+        searches=scan_searches_from(turn) or None,
     )
     if without_fix:
         messages[0]["content"] = _synthesis_prompt_at(rev, research_mode)
         if not rev_has_pinpoint_block(rev):
             messages[1]["content"] = strip_pinpoint_block(messages[1]["content"])
+        if not rev_has_court_limits_block(rev):
+            messages[1]["content"] = strip_court_limits_block(messages[1]["content"])
     return messages
 
 
@@ -458,24 +548,42 @@ def lawyer_words_fn(rev: Optional[str] = None):
     return _module_at(rev, LAWYER_WORDS_PATH, "src.utils").with_lawyer_words
 
 
+def filter_note_fn(rev: Optional[str] = None):
+    """`quick_lookup_filter_note` as the code at `rev` has it (default: the
+    working tree), or None at a revision before P3.14, whose quick-lookup
+    Worker was told nothing of the filters."""
+    if not rev:
+        from src.prompts import quick_lookup_filter_note
+        return quick_lookup_filter_note
+    if "def quick_lookup_filter_note" not in _file_at(rev, "server_py/src/prompts.py"):
+        return None
+    return _module_at(rev, "server_py/src/prompts.py", "src").quick_lookup_filter_note
+
+
 def worker_user_message(doc: dict, turn: dict, dg: dict, rev: Optional[str] = None,
-                        lawyer_words: bool = True) -> str:
+                        lawyer_words: bool = True, filter_note: bool = True,
+                        on_date: Optional[date] = None) -> str:
     """The Worker's user message as `run_worker_agent` builds it (P3.52 (c)):
     the recorded brief, then the turn's question through the product's own
     `with_lawyer_words`. `replay.py` sends the turn's question verbatim as the
     request's last user message, so it is what `_cache_key_query` held. P3.7's
-    lookup block is not part of it (`--first-round` rebuilds that).
+    lookup block is not part of it (`--first-round` rebuilds that). Then
+    (P3.14) the quick-lookup Worker's filter note, through the product's own
+    `quick_lookup_filter_note` at `rev`, with `on_date` as its today.
 
-    `lawyer_words=False` is the before side of (c): the brief alone."""
+    `lawyer_words=False` is the before side of (c): the brief alone.
+    `filter_note=False` is the before side of P3.14."""
     brief = dg.get("brief") or ""
     if not brief:
         return turn.get("question") or ""
-    fn = lawyer_words_fn(rev) if lawyer_words else None
-    if fn is None:
-        return brief
     cfg = _cfg_for(doc, turn)
-    return fn(brief, turn.get("question") or "", cfg.get("_research_mode"),
-              cfg.get("_chat_mode"))
+    fn = lawyer_words_fn(rev) if lawyer_words else None
+    text = brief if fn is None else fn(
+        brief, turn.get("question") or "", cfg.get("_research_mode"), cfg.get("_chat_mode"))
+    note_fn = filter_note_fn(rev) if filter_note else None
+    if note_fn is not None:
+        text += note_fn(cfg.get("_research_mode") or "legislation_only", cfg, on_date)
+    return text
 
 
 def worker_first_round_messages(doc: dict, turn: dict, delegation: int = 1,
@@ -647,7 +755,8 @@ def worker_as_sent_messages(doc: dict, turn: dict, delegation: int = 1,
         {"role": "system", "content": system},
         # P3.52 (c): the lawyer's words as the code at `at_rev` (or the working
         # tree) appended them; the brief alone at a revision before (c).
-        {"role": "user", "content": worker_user_message(doc, turn, dg, rev=at_rev)},
+        {"role": "user", "content": worker_user_message(doc, turn, dg, rev=at_rev,
+                                                        on_date=on_date)},
     ]
     n = 0
     for rnd in rounds:
@@ -1019,9 +1128,12 @@ def manager_head(doc: dict, turn: dict, without_fix: bool = False,
         # The constant at `rev` is the triple-quoted literal alone; the live
         # body is that literal plus the research-mode hint appended to it.
         import src.prompts as prompts
+        # Not `hint`: that name is the --hint flag below, and rebinding it to
+        # this (non-empty) string made every --without-fix draw apply P3.2's
+        # live provision hint to the lawyer's turn (Session 52, Fix 2).
         live = prompts._MANAGER_CONV_BODY
-        hint = prompts.RESEARCH_MODE_HINT_ON
-        literal = live[:-len(hint)] if live.endswith(hint) else live
+        mode_hint = prompts.RESEARCH_MODE_HINT_ON
+        literal = live[:-len(mode_hint)] if live.endswith(mode_hint) else live
         if literal not in system:
             raise SystemExit("--without-fix: the live conversational body is not in the prompt")
         system = system.replace(literal, _prompt_constant_at(rev, "_MANAGER_CONV_BODY"), 1)
@@ -1125,6 +1237,8 @@ def _cfg_for(doc: dict, turn: dict) -> dict:
         "_legislation_type": f.get("legislation_type"),
         "_year_from": f.get("year_from"),
         "_year_to": f.get("year_to"),
+        "_date_from": f.get("date_from"),
+        "_date_to": f.get("date_to"),
     }
 
 
@@ -1495,6 +1609,17 @@ def main(argv: Optional[list] = None) -> int:
               f"{'present' if 'PINPOINTS TO KEEP' in messages[1]['content'] else 'absent'}"
               + (f" ({args.rev} {'has' if rev_has_pinpoint_block(args.rev) else 'predates'}"
                  " P3.1's block)" if args.without_fix else ""))
+        _lims = court_limits_from(turn)
+        print(f"  court's own limits block (P3.50 A1): "
+              f"{'present' if f'[{COURT_LIMIT_HEAD}S' in messages[1]['content'] else 'absent'}"
+              f"; limits found in the turn's judgments: {len(_lims)}"
+              + "".join(f"\n    {l.get('ncn') or l.get('url')} para {l.get('para') or '-'} "
+                        f"(kind {l.get('kind')})" for l in _lims))
+        _body = messages[1]["content"]
+        print(f"  list coverage note (P3.53): "
+              f"{'present' if '[SEARCH SCOPE — list coverage' in _body else 'absent'}; "
+              f"text scan note (P3.57): "
+              f"{'present' if '[SEARCH SCOPE — text scan by code, across' in _body else 'absent'}")
     else:
         tool_msgs = [m for m in messages if m.get("role") == "tool"]
         with_outline = sum(1 for m in tool_msgs if "[SECTION OUTLINE" in (m.get("content") or ""))
@@ -1515,6 +1640,19 @@ def main(argv: Optional[list] = None) -> int:
         clean, _ = strip_scope_blocks(content)
         if args.seam in ("synthesis", "manager"):
             clean, _ = apply_lost_disclosure(clean, lost_for_answer, any_completed)
+        if args.seam == "synthesis":
+            # P3.50 (A1): what the draw carries itself, then the answer seam's
+            # restore as the product applies it (without --without-fix).
+            _lims = court_limits_from(turn)
+            carried = [l for l in _lims if l.get("para")
+                       and re.search(rf"\[{l['para']}\]|\bparas?\.?\s*{l['para']}\b"
+                                     rf"|\bparagraphs?\s+{l['para']}\b", clean, re.I)]
+            print(f"      court's limit pinpointed by the draw itself: "
+                  f"{len(carried)} of {len(_lims)}")
+            if not args.without_fix:
+                clean, _r = restore_court_limits(clean, _lims)
+                if _r:
+                    print(f"      restored {_r} court's own limit(s) at the answer seam")
         if args.seam == "manager":
             # What the product does to the Manager's text before the lawyer sees
             # it, in the order `process_user_request` does it.

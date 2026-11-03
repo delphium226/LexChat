@@ -1,0 +1,12 @@
+{
+  "session_id": "p334_6384",
+  "base": "6384",
+  "note": "P3.34 acceptance: session 6384's turn 4 only, in Deep Research under 'legislation_only', as every stored 6384 replay ran it (the session's mode). Graded by hand: the answer cites at least the best stored answer's 5 bare-term definers, and no instrument is named as defining the term unless its retrieved text does. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 4,
+      "research_mode": "legislation_only",
+      "chat_mode": "deep_research"
+    }
+  ]
+}

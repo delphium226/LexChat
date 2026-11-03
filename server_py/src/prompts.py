@@ -217,6 +217,15 @@ _RELATIONSHIP_RULE = """COMMENCEMENT, AMENDMENT, REPEAL AND REVOCATION (relation
 # its report, `agent_core.run_worker_agent`), so this sentence states the rule
 # in terms of the record the Worker does see. Screened against every detector
 # in `test_footer_trips_no_detector`, since a Worker can echo it.
+#
+# FIX_PLAN P3.28 (F2, user-approved wording): (b) names the removal classes the
+# change record marks on each removal group (`removal`, `qualifier`, written by
+# `lex._slim_amendment_results` from `utils/removal_effects.classify_removal`).
+# It used to say that ANY repeal or revocation relation puts the provision out
+# of force, which contradicted the change-record block for "words repealed"
+# (the text amended, the provision stays) and "repealed (prosp.)" or "repealed
+# (S)" (only with the qualification). Screened: like the clause it replaced,
+# it trips `negcurrency`'s `no_longer` and nothing else.
 _COMMENCEMENT_RECORD_RULE = (
     "- (a) counts only a relation made by ANOTHER instrument (`self: false`), never a "
     "`self: true` one, which is the instrument's own commencement provision and says "
@@ -232,7 +241,7 @@ _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
 - NEVER infer currency from CASE LAW. A judgment citing, applying or discussing an Act is not evidence that the Act, or any provision of it, is in force today: courts apply the law as it stood at the material time, and a 2026 judgment on a 1998 Act says nothing about which of its provisions are commenced or repealed now. Do not write that a case "confirms" an Act's status.
 - What you MAY state, citing the source:
   (a) a `coming into force` relation from `get_legislation_changes` — that named provision was commenced by that named instrument. The relation carries no date of its own; where code added an `in_force` date to it, give that date with its qualification as the date the instrument brought the provision into force, never as its status today; otherwise, for a date, retrieve the commencing instrument and quote it. Where the entry also carries `date_still_to_come`, the date is after today's date: say the provision is due to come into force on it, never that it has been brought into force.
-  (b) a repeal or revocation relation from `get_legislation_changes` — that named provision is no longer in force.
+  (b) a removal from `get_legislation_changes` whose group is marked `removal: provision` or `removal: provision_in_part` — that named provision, or the part removed, is no longer in force. A group marked `removal: words_only` amends the provision's text and does not remove the provision; one marked `removal: qualified` may be stated only with its `qualifier`.
   (c) a repeal or revocation marker in the index's own title, e.g. "Companies Act 1967 (repealed)" — treat that instrument as repealed.
   (d) the `valid_date` on a `get_legislation_text` response — the date the held text is stated to be up to date to. Say it as that, never as a date the legislation came into force.
 - `Commencement Order` is NOT (a). Those relations are commencement orders for an amendment made to the legislation by some other Act, and the provision against them is a placeholder. Never name one as having commenced the legislation you were asked about.
@@ -260,6 +269,24 @@ _IN_FORCE_RULE = """IN-FORCE STATUS (whether legislation is current law):
 _NOT_HELD_RULE = """NOT HELD IS NOT A WRONG CITATION:
 - If an instrument or case the brief cites is not found (a search that does not return it, or a retrieval by id that answers not-found), report that this index does not hold it.
 - Do NOT write that the citation may be wrong or contain a typo, do NOT ask the user to check, verify or confirm it, and do NOT present a different instrument (another year or number) as the one the user meant. The indexes are incomplete, recent instruments least of all, so a correct citation is often not held."""
+
+
+# P3.34 (B11): the one line naming `find_definitions`, in the two research
+# Worker prompts. Not in the quick-lookup Worker's prompt: that Worker is
+# offered the tool since the P3.34 follow-up, measured with this line absent
+# (`schemas.QUICK_LOOKUP_WITHHELD_TOOLS`), so its prompt is unchanged. The
+# load-bearing half is code: the tool filters the rows, and its block, the
+# Manager's limb and the footer each say the list is one search, not a census.
+# Written out INSIDE each prompt's literal (not spliced in), so `seam_replay`'s
+# literal reader (`_prompt_constant_at`) still reads each prompt whole;
+# `tests/test_find_definitions.py` checks both copies equal this constant.
+_DEFINITIONS_TOOL_LINE = (
+    "- `find_definitions`: when the question asks where or how a term is defined in "
+    "legislation, or for every statutory definition of a term, call it once with the term: "
+    "it searches all legislation and lists the instruments that define the term, each with "
+    "its defining words, provision link and stated extent. Its list comes from one search, "
+    "so never present it as every definition there is."
+)
 
 
 WORKER_SYSTEM_PROMPT = """You are a specialized Legal Research Support Agent for UK Law.
@@ -304,6 +331,7 @@ TOOL GUIDANCE:
   - Use the exact short title of the Act, not a topic description.
 - `search_legislation_sections`: The primary retrieval tool. Use after `search_legislation` to pull specific provisions from a known Act. Pass the `legislation_id` and a query describing the specific provision (e.g. "general duty of employer", "penalty", "definition of worker"). This is how you get the actual legal text — use it for every Act found in Phase 1.
 - `get_legislation_changes`: The ONLY source of commencement, amendment, repeal and revocation relations. Pass a `legislation_id` and a direction. Returns the instruments involved and the provisions affected, grouped — with no dates of their own (code adds a commencement's `in_force` date where legislation.gov.uk's record gives one), and no enabling power.
+- `find_definitions`: when the question asks where or how a term is defined in legislation, or for every statutory definition of a term, call it once with the term: it searches all legislation and lists the instruments that define the term, each with its defining words, provision link and stated extent. Its list comes from one search, so never present it as every definition there is.
 - `get_legislation_text`: Fallback only. Use when `search_legislation_sections` returns nothing useful, or when the question genuinely requires the full Act text. Do not use as a first step.
 - Never answer from memory alone. If you have not called at least `search_legislation` followed by `search_legislation_sections`, you have not done your job.
 
@@ -412,6 +440,7 @@ Phase 1 typically returns more results than you need — a single search can sur
 - JURISDICTION SCOPE: when the brief names a jurisdiction (e.g. Scotland, England and Wales, Northern Ireland), retrieve sections ONLY for the legislation that applies in that jurisdiction (UK legislation that extends there included). For a Scotland question, do not pull English, Welsh, or Northern Irish instruments even if they appear in Phase 1 results. If a judgment you have read cites legislation across several jurisdictions, follow up only on the legislation for the jurisdiction the brief asks about.
 - For each SELECTED legislation_id, call `search_legislation_sections` — start with ONE call per legislation_id, combining all aspects into a single query. Search it again only for an aspect that call did not return: at most 3 times per legislation_id in this step (calls issued together in one turn count once); further calls on it are refused.
 - Issue all Phase 2 searches in a single turn.
+- `find_definitions`: when the question asks where or how a term is defined in legislation, or for every statutory definition of a term, call it once with the term: it searches all legislation and lists the instruments that define the term, each with its defining words, provision link and stated extent. Its list comes from one search, so never present it as every definition there is.
 
 PHASE 3 — CASE LAW RESEARCH:
 Call `search_case_law` to find judgments relevant to this question. Issue TWO types of query in a single turn:
@@ -465,6 +494,15 @@ OUTPUT STRUCTURE (Use Markdown):
 # can still swap the whole literal for an A/B. It changes the Manager's FIRST
 # delegation brief by design (the brief now names the jurisdiction), and the
 # brief rule forbids naming an instrument for it, after P3.13's lesson.
+#
+# FIX_PLAN P3.51, Fix 2 (Session 52, wording approved by the user for a
+# single-step test): the power-question line in WHEN USING delegate_research.
+# 9 of the 12 Q16 (6354) runs since P3.51's block briefed the DUTY ("find the
+# legislation on local authority duties ..."), and a duty-worded section search
+# of the 1987 Act ranks s.33A 9th once in 19; power-framed Worker queries reached
+# the s.33 family 5 of 8 against 1 of 6 (`evidence/seam/s52/brief/`). It names
+# no instrument (P3.13's lesson) and sits INSIDE the literal, so
+# `seam_replay manager --first-round --without-fix --rev <before>` is the A/B.
 _MANAGER_CONV_BODY = """You are a legal assistant for a UK government legal department.
 Your users are qualified lawyers. Be concise, direct, and professional.
 
@@ -491,6 +529,7 @@ JURISDICTION:
 WHEN USING delegate_research IN CHAT MODE:
 - Write a tightly scoped brief. Example: "Find the definition of 'acquiring authority' in the Acquisition of Land Act 1981 s.7." — not a multi-Act research mandate.
 - Include any Act names, SI numbers, or context from earlier in the conversation.
+- When the user asks what power, provision or mechanism would let someone do something (enable, allow, change, lessen or suspend a requirement), write the brief as a search for that power, in the user's own words: ask for provisions that give a power to do it or to change the rule, not for the duty, scheme or body the power would act on.
 
 TONE:
 - Conversational but professional. Avoid flowery phrases ("I would be happy to help").
@@ -915,6 +954,121 @@ def _filter_constraint_block_for_mode(research_mode: str, cfg: dict) -> str:
     if research_mode == "westminster_records":
         return build_westminster_filter_constraint_block(cfg)
     return build_filter_constraint_block(cfg)
+
+
+# FIX_PLAN P3.14: what the quick-lookup (conversational) Worker is told about
+# the legal professional's research filters. `get_worker_system_prompt` returns that
+# Worker's prompt from an early return, so the ACTIVE RESEARCH FILTERS block
+# above reaches the research Workers and never this one. The filters were
+# always ENFORCED (the executor reads them from the request config); what the
+# Worker lacked was knowing that a filter, not the index or the law, narrowed
+# its search: B5's shape. Measured in the stored runs, 6357 (Acts only) told
+# the legal professional an SSI was "unable to locate ... in the available legislation
+# database" (wave1 rep1 t2) and "the legislation index does not hold" it
+# (wave2 rep1 t1).
+#
+# **It goes in the Worker's USER message, after the brief (and after P3.52
+# (c)'s block), not in its system prompt, deliberately.** P2.4 measured a
+# rule block appended to this Worker's system prompt moving its reports to
+# bullets (0 of 9 to 5 of 9) and cutting case-law links that reached the
+# answer (7 of 15 to 2 of 13), because the chat-mode Manager rewrites a
+# bulleted report and drops the link round each case name (Session 14).
+# The research block is that shape (a header and a bulleted list). Here the
+# system prompt stays byte-identical whatever the filters, and the note is a
+# bracketed statement of facts beside the brief, where P3.52 (c) showed text
+# reaches this Worker.
+#
+# **Only filters that can exclude something are named.** An upper year bound
+# at or after the current year, or a case-law end date on or after today,
+# excludes nothing; the replay harness sends `year_to: 2026` on 6370, 6375 and
+# 6406 (P3.3's and P3.2's measurements), so naming it would move those
+# payloads for no reason, and a note naming an inert filter invites the model
+# to blame it. Legislation filters are named only to a Worker with the
+# legislation tools, the case-law date range only to one with the case-law
+# tools. With nothing to name the note is "" and the message is unchanged.
+#
+# No "answer for X" clause (user decision, Session 52): the note states
+# what the filters do and nothing about which jurisdiction to answer for;
+# that stays with the prompt and the brief.
+#
+# Screened against the answer detectors (`test_quick_lookup_filters.py`),
+# since a Worker can echo it. Never raises (Invariant 5).
+QUICK_LOOKUP_FILTERS_LABEL = "RESEARCH FILTERS"
+
+_QL_LEGISLATION_MODES = ("legislation_only", "legislation_and_case_law")
+_QL_CASE_LAW_MODES = ("case_law_only", "legislation_and_case_law")
+
+_QL_TYPE_PHRASES = {
+    "primary": "legislation searches return Acts only (primary legislation)",
+    "secondary": "legislation searches return statutory instruments only (secondary legislation)",
+    "draft": "legislation searches return draft statutory instruments only",
+}
+
+
+def _ql_jurisdiction_phrase(jurisdiction: str) -> str:
+    if jurisdiction == "uk_wide":
+        return ("legislation search results are kept only where their stated extent is the "
+                "United Kingdom, so legislation that applies across the UK without stating it "
+                "is left out")
+    label = _JURISDICTION_LABELS.get(jurisdiction, jurisdiction)
+    return (f"legislation search results whose stated extent leaves out {label} are removed "
+            f"(most results state no extent and are kept, so a result is not thereby shown "
+            f"to apply in {label})")
+
+
+def quick_lookup_filter_note(research_mode: str, cfg: dict, today=None) -> str:
+    """The note appended to the quick-lookup Worker's user message naming the
+    research filters that can exclude something ("" where none applies, or
+    for any other Worker). `today` (a `date`) decides which upper bounds are
+    inert; the product passes none (today)."""
+    try:
+        if not cfg or cfg.get("_chat_mode") != "conversational":
+            return ""
+        if research_mode in ("parliamentary_records", "westminster_records"):
+            return ""
+        from datetime import date
+        today = today or date.today()
+        facts = []
+        if research_mode in _QL_LEGISLATION_MODES:
+            lt = cfg.get("_legislation_type")
+            if lt:
+                facts.append(_QL_TYPE_PHRASES.get(
+                    lt, f"legislation searches return {lt} legislation only"))
+            jur = cfg.get("_jurisdiction")
+            if jur:
+                facts.append(_ql_jurisdiction_phrase(jur))
+            yf = cfg.get("_year_from")
+            yt = cfg.get("_year_to")
+            if yt and int(yt) >= today.year:
+                yt = None
+            if yf and yt:
+                facts.append(f"legislation searches return legislation from {yf} to {yt} only")
+            elif yf:
+                facts.append(f"legislation searches return legislation from {yf} onwards only")
+            elif yt:
+                facts.append(f"legislation searches return legislation up to {yt} only")
+        if research_mode in _QL_CASE_LAW_MODES:
+            df = cfg.get("_date_from")
+            dt = cfg.get("_date_to")
+            if dt and str(dt)[:10] >= today.isoformat():
+                dt = None
+            if df and dt:
+                facts.append(f"case-law searches return judgments dated {df} to {dt} only")
+            elif df:
+                facts.append(f"case-law searches return judgments dated from {df} only")
+            elif dt:
+                facts.append(f"case-law searches return judgments dated up to {dt} only")
+        if not facts:
+            return ""
+        return (
+            f"\n\n[{QUICK_LOOKUP_FILTERS_LABEL} — set by the legal professional and applied by the system "
+            "to every search you make: " + "; ".join(facts) + ". Something the brief asks "
+            "about that your searches do not return may have been left out by these filters: "
+            "if so, say that the filters left it out, never that it is unavailable or does not "
+            "exist.]"
+        )
+    except Exception:
+        return ""
 
 
 # FIX_PLAN P3.20: the case-law wording when `search_case_law` also searches

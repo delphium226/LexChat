@@ -65,7 +65,7 @@ async def _manager_turn(monkeypatch, manager_text, worker_calls):
         "_chat_mode": "conversational",
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False, results_bounded=False):
         if name == "search_case_law":
             return json.dumps({"results": [
                 {"title": "Alpha v Beta", "ncn": "[2020] EWHC 1", "court": "ewhc",
@@ -80,7 +80,7 @@ async def _manager_turn(monkeypatch, manager_text, worker_calls):
 
     async def worker_chat_loop(messages, model, cancel_event, num_ctx, tools,
                                executor, on_chunk=None, emit_tool_details=False,
-                               timing_collector=None, worker_call=False):
+                               timing_collector=None, worker_call=False, results_bounded=False):
         for name, args in worker_calls:
             await executor(name, args)
         return {"role": "assistant", "content": (
@@ -200,7 +200,7 @@ async def test_deep_research_strips_an_echo_ahead_of_the_link_note():
 
     async def synthesis(messages, model, cancel_event, num_ctx, tools, tool_executor,
                         on_chunk=None, emit_tool_details=False, timing_collector=None,
-                        worker_call=False):
+                        worker_call=False, results_bounded=False):
         return {"role": "assistant", "content": "Integrated report. " + _PROSE + _ECHO}
 
     result = await run_deep_research(

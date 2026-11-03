@@ -1,0 +1,27 @@
+{
+  "session_id": "p334_6362r",
+  "base": "6362",
+  "note": "P3.34 control (batch 12 F: a definition inside one instrument): session 6362's turns 1-4 in Research chat mode under 'legislation_only'. The session ran Conversational, where the tool is not offered (a $0 rebuild shows that Worker's prompt and tools unchanged), so this runs it where the tool is offered. Pass: turn 4 still answers from the instrument the conversation is about, not from a corpus-wide list. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 1,
+      "research_mode": "legislation_only",
+      "chat_mode": "research"
+    },
+    {
+      "from_turn": 2,
+      "research_mode": "legislation_only",
+      "chat_mode": "research"
+    },
+    {
+      "from_turn": 3,
+      "research_mode": "legislation_only",
+      "chat_mode": "research"
+    },
+    {
+      "from_turn": 4,
+      "research_mode": "legislation_only",
+      "chat_mode": "research"
+    }
+  ]
+}

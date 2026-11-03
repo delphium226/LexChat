@@ -77,7 +77,7 @@ def _round_and_config():
 def calls(monkeypatch):
     seen = []
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False, results_bounded=False):
         seen.append((name, dict(args)))
         if name == "search_legislation":
             return json.dumps({"results": [{"legislation_id": FOISA, "title": "FOISA",
@@ -376,7 +376,7 @@ async def _worker_run(rounds, research_mode="legislation_only"):
                                  "model": "test-model", "_tool_memo_enabled": False})
 
     async def loop(messages, model, cancel_event, num_ctx, tools, executor,
-                   on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
+                   on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False, results_bounded=False):
         for i, round_calls in enumerate(rounds):
             set_react_round(i)
             for name, args in round_calls:
@@ -443,7 +443,7 @@ async def test_the_manager_answer_carries_the_clause(monkeypatch, calls):
 
 @pytest.mark.asyncio
 async def test_the_parliamentary_budget_ignores_section_searches(monkeypatch):
-    async def fake_parl(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+    async def fake_parl(name, args, on_chunk=None, timing_collector=None, worker_call=False, results_bounded=False):
         return json.dumps({"results": [{"id": 1}]})
 
     monkeypatch.setattr(agent_shared, "execute_parliament_tool", fake_parl)
@@ -666,7 +666,7 @@ def _route_stub(monkeypatch, rows):
         asked.append(url)
         return httpx.Response(200, json=rows, request=httpx.Request(method, url))
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False, results_bounded=False):
         return json.dumps({"results": [{
             "legislation_id": LID, "provision_type": "section", "number": 1,
             "title": "Citation", "url": f"{URI}/article/1",
@@ -783,7 +783,7 @@ async def test_a_worker_run_carries_the_list_to_its_block(monkeypatch):
                                  "model": "test-model", "_tool_memo_enabled": False})
 
     async def loop(messages, model, cancel_event, num_ctx, tools, executor,
-                   on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
+                   on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False, results_bounded=False):
         for i in range(4):
             set_react_round(i)
             seen.append(await executor("search_legislation_sections",

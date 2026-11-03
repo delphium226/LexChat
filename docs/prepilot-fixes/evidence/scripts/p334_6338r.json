@@ -1,0 +1,12 @@
+{
+  "session_id": "p334_6338r",
+  "base": "6338",
+  "note": "P3.34 control: session 6338's turn 1 in Research chat mode under 'legislation_only'. P3.17's PHASE 2c (the application provision) is in the quick-lookup Worker's prompt only, and that Worker's prompt and tools are unchanged by P3.34 ($0 rebuild), so the stored Conversational turn is a no-op control; this asks whether the research Worker, offered the tool, answers which definition applies rather than listing competing ones. Turn text is taken from the export by index and is never stored here.",
+  "turns": [
+    {
+      "from_turn": 1,
+      "research_mode": "legislation_only",
+      "chat_mode": "research"
+    }
+  ]
+}

@@ -247,7 +247,7 @@ async def test_run_worker_agent_hands_on_its_lookups_titles(monkeypatch):
         "_chat_mode": "research", "model": "test-model", "_tool_memo_enabled": False,
     })
 
-    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False):
+    async def fake_exec(name, args, on_chunk=None, timing_collector=None, worker_call=False, results_bounded=False):
         if name == "lookup_legislation":
             n = args.get("number")
             return _lookup(f"ssi/1901/{n}", "Widget Order 1901" if n == 3 else None)
@@ -256,7 +256,7 @@ async def test_run_worker_agent_hands_on_its_lookups_titles(monkeypatch):
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, executor,
                         on_chunk=None, emit_tool_details=False, timing_collector=None,
-                        worker_call=False):
+                        worker_call=False, results_bounded=False):
         await executor("lookup_legislation", {"legislation_type": "ssi", "year": 1901, "number": 3})
         await executor("lookup_legislation", {"legislation_type": "ssi", "year": 1901, "number": 4})
         await executor("search_legislation", {"query": "widget"})

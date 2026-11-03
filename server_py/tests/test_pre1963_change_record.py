@@ -196,10 +196,19 @@ def test_footer_mixed_keeps_the_consulted_lead_and_adds_the_clause():
                                            ("ukpga/1950/28", [])))
     assert clause.startswith(" Commencement and amendment relations above come from")
     assert "An empty change record means the change is not recorded" in clause
+    # P4.20: the pre-1963 records are marked in the one list, not listed again.
+    assert (f"recorded changes for {MODERN}, {SHOPS_1950} (made before 1963), "
+            "ukpga/1950/28 (made before 1963), which this research consulted "
+            "directly") in clause
     assert clause.endswith(
-        f"before 1963 ({SHOPS_1950}, ukpga/1950/28), so whether they have been "
+        "before 1963, so whether those marked above as made before 1963 have been "
         "amended or repealed since is not known from this research; check the "
         "revised text on legislation.gov.uk before relying on them.")
+    one = _relations_footer_clause(_log((MODERN, []), (SHOPS_1950, [])))
+    assert one.endswith(
+        "before 1963, so whether the one marked above as made before 1963 has been "
+        "amended or repealed since is not known from this research; check the "
+        "revised text on legislation.gov.uk before relying on it.")
 
 
 def test_footer_names_every_pre_1963_instrument_up_to_eight_then_counts():

@@ -4,11 +4,13 @@ import {
   HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
+  RESEARCH_TYPE_OPTIONS,
   getLatestSession,
   getRecordTypeOptions,
   getSessionFilterLabel,
   getSessionOptions,
 } from '../constants/research';
+import { jurisdictionFilterNote } from '../utils/jurisdictionNote';
 
 // Research-filters dialog. Draft-and-apply: all edits mutate a local draft and
 // are only committed to the persisted filter state (useFilters) / research mode
@@ -49,6 +51,9 @@ export default function ResearchFiltersModal({
       const next = cur.includes(value) ? cur.filter(s => s !== value) : [...cur, value];
       return { ...d, sessions: next };
     });
+
+  // P4.27: what the chosen jurisdiction keeps (null for All jurisdictions).
+  const jurisdictionNote = jurisdictionFilterNote(jurisdiction, researchMode);
 
   const showScotlandNINote =
     (jurisdiction === 'scotland' || jurisdiction === 'northern_ireland') && researchMode !== 'legislation_only';
@@ -251,11 +256,9 @@ export default function ResearchFiltersModal({
             {/* § Research type */}
             <div>
               {secHead('Research type')}
-              {[
-                { value: 'legislation_only', label: 'Legislation only' },
-                { value: 'case_law_only', label: 'Case law only' },
-                { value: 'legislation_and_case_law', label: 'Legislation & case law' },
-              ].map(opt => optBtn(researchMode === opt.value, () => set('researchMode', opt.value), opt.label))}
+              {RESEARCH_TYPE_OPTIONS.map(opt =>
+                optBtn(researchMode === opt.value, () => set('researchMode', opt.value), opt.label)
+              )}
             </div>
 
             {/* § Jurisdiction */}
@@ -263,6 +266,9 @@ export default function ResearchFiltersModal({
               {secHead('Jurisdiction')}
               {JURISDICTION_OPTIONS.map(opt =>
                 optBtn(jurisdiction === opt.value, () => set('jurisdiction', opt.value), opt.label)
+              )}
+              {jurisdictionNote && (
+                <p className="mx-2 mt-1 mb-1 font-ui text-xs leading-snug text-ink-600">{jurisdictionNote}</p>
               )}
               {showScotlandNINote && (
                 <div

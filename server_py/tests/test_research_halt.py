@@ -156,7 +156,7 @@ def _halting_chat_loop(halt_after_tools=True, manager_answer=None):
     state = {"calls": 0}
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False,
+                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False, results_bounded=False,
                         manager_call=False, manager_report_in_hand=None):
         state["calls"] += 1
         return {"role": "assistant", "content": RAW, "halted": dict(HALT)}
@@ -263,7 +263,7 @@ def _plan(n):
 
 
 async def _synthesis(messages, model, cancel_event, num_ctx, tools, executor,
-                     on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False):
+                     on_chunk, emit_tool_details=False, timing_collector=None, worker_call=False, results_bounded=False):
     return {"content": "INTEGRATED REPORT: the statutory framework is as follows."}
 
 
@@ -368,7 +368,7 @@ async def test_a_halted_worker_costs_no_reformat_call(_cfg):
     calls = []
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
+                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False, results_bounded=False):
         calls.append(tools)
         return {"role": "assistant", "content": RAW, "halted": dict(HALT)}
 
@@ -396,7 +396,7 @@ async def test_an_unhalted_malformed_report_still_gets_its_retry(_cfg):
     calls = []
 
     async def chat_loop(messages, model, cancel_event, num_ctx, tools, tool_executor,
-                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False):
+                        on_chunk=None, emit_tool_details=False, timing_collector=None, worker_call=False, results_bounded=False):
         calls.append(tools)
         return {"role": "assistant", "content": seq[len(calls) - 1]}
 

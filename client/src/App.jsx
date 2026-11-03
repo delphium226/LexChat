@@ -13,6 +13,9 @@ import {
 import ChatMessage from './components/ChatMessage';
 import { LexMark } from './components/LexMark';
 import SourcesRail from './components/SourcesRail';
+import { railTurn } from './utils/railTurn';
+import { modeChangeMarkers } from './utils/modeChange';
+import ModeChangeMarker from './components/ModeChangeMarker';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginModal from './components/LoginModal';
 import AdminPortal from './pages/AdminPortal';
@@ -29,9 +32,11 @@ import ResearchFiltersModal from './components/ResearchFiltersModal';
 import Composer from './components/Composer';
 import Sidebar from './components/Sidebar';
 import {
+  CHAT_MODE_LABELS,
   HOUSE_OPTIONS,
   JURISDICTION_OPTIONS,
   LEGISLATION_TYPE_OPTIONS,
+  RESEARCH_TYPE_LABELS,
   getRecordTypeOptions,
   getSessionFilterLabel,
   getSessionOptions,
@@ -196,12 +201,7 @@ function AppContent() {
 
   // ── Derived ──────────────────────────────────────────────────
 
-  const researchModeLabel =
-    {
-      legislation_only: 'Legislation only',
-      case_law_only: 'Case law only',
-      legislation_and_case_law: 'Legislation & case law',
-    }[researchMode] || 'Legislation only';
+  const researchModeLabel = RESEARCH_TYPE_LABELS[researchMode] || RESEARCH_TYPE_LABELS.legislation_only;
 
 
   // Has this thread already had end-of-session feedback? Nothing on the chat
@@ -313,29 +313,14 @@ function AppContent() {
     return out;
   }, [runSummaries]);
 
-  // ID of the last assistant message that has sources (used for default highlight)
-  const latestSourceMsgId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant' && messages[i].sources?.length && messages[i].id) {
-        return messages[i].id;
-      }
-    }
-    return null;
-  }, [messages]);
-
-  // Sources for the rail — shows explicitly selected turn, else the latest turn
-  const activeSources = useMemo(() => {
-    if (activeSourcesMsgId != null) {
-      const msg = messages.find(m => m.id === activeSourcesMsgId);
-      if (msg?.sources?.length) return msg.sources;
-    }
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant' && messages[i].sources?.length) {
-        return messages[i].sources;
-      }
-    }
-    return [];
-  }, [messages, activeSourcesMsgId]);
+  // P4.25: the answer the Sources rail belongs to — the one whose Sources
+  // button was pressed, else the latest — and its sources. An answer with no
+  // source of its own shows none (and says so), never an earlier answer's.
+  const rail = useMemo(
+    () => railTurn(messages, activeSourcesMsgId, streaming),
+    [messages, activeSourcesMsgId, streaming]
+  );
+  const activeSources = rail.sources;
 
   // Two parliamentary bots share this client, selected by the bot's research mode:
   // Holyrood (unicameral, Sessions 1-7) and Westminster (two Houses, Parliaments).
@@ -345,6 +330,16 @@ function AppContent() {
   const isHolyrood = botMode === 'parliamentary_records';
   const isWestminster = botMode === 'westminster_records';
   const isParliament = isHolyrood || isWestminster;
+
+  // P4.9: where the thread says the research type or the chat mode changed,
+  // from the modes each stored answer ran under. Legislation bot only: on the
+  // parliamentary bots the research type is fixed, and Conversational and
+  // Research run the same Manager and Worker prompts, so a marker would announce a
+  // change that does not change the research.
+  const modeMarkers = useMemo(
+    () => (isParliament ? new Map() : modeChangeMarkers(messages)),
+    [messages, isParliament]
+  );
 
   // The correct session/Parliament default depends on which bot this is, which is
   // only known once /api/bot-info resolves — apply it then, and drop any persisted
@@ -621,12 +616,7 @@ function AppContent() {
             // 1. Mode — always the first pill
             chips.push({
               icon: <ScalesIcon />,
-              label:
-                chatMode === 'conversational'
-                  ? 'Conversational'
-                  : chatMode === 'deep_research'
-                    ? 'Deep Research'
-                    : 'Research',
+              label: CHAT_MODE_LABELS[chatMode] || CHAT_MODE_LABELS.research,
             });
 
             // 2. Region
@@ -802,6 +792,7 @@ function AppContent() {
                   if (msg.role === 'tool') return null;
                   return (
                     <React.Fragment key={msg.id ?? idx}>
+                    <ModeChangeMarker parts={modeMarkers.get(idx)} />
                     <ChatMessage
                       message={msg}
                       onResend={() => {
@@ -847,7 +838,7 @@ function AppContent() {
                       sourcesActive={
                         msg.role === 'assistant' &&
                         msg.id != null &&
-                        (msg.id === activeSourcesMsgId || (activeSourcesMsgId == null && msg.id === latestSourceMsgId))
+                        msg.id === rail.id
                       }
                     />
                     {/* Chips only under the newest answer — a long thread must
@@ -1050,6 +1041,15 @@ function AppContent() {
           {/* Sources rail */}
           <SourcesRail
             sources={activeSources}
+            forAnswer={rail.hasTurn}
+            onShowEarlier={
+              rail.earlierId != null
+                ? () => {
+                    setActiveSourcesMsgId(rail.earlierId);
+                    setSourcesCollapsed(false);
+                  }
+                : undefined
+            }
             activeCite={activeCite}
             onCiteClick={setActiveCite}
             collapsed={sourcesCollapsed}

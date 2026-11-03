@@ -19,6 +19,7 @@ from ..prompts import (
     get_manager_system_prompt,
     get_planner_system_prompt,
     get_worker_system_prompt,
+    quick_lookup_filter_note,
 )
 from ..utils.audit_trace import get_audit_collector
 from ..utils.citation_links import (
@@ -35,6 +36,11 @@ from ..utils.instrument_lookup import (
 )
 from ..utils.lawyer_words import with_lawyer_words
 from ..utils.made_under import prune_section_family_entries
+from ..utils.revocation_marks import mark_revoked_instruments
+from ..utils.made_under_answer import list_made_under_for_answer
+from ..utils.court_limits import (
+    CASE_LAW_TEXT_TOOL, court_limits_block, dedupe_limits, limits_in_text, restore_court_limits,
+)
 from ..utils.mode_change import apply_mode_change_marker, mode_change_for
 from ..utils.openers import strip_agreement_opener
 from ..utils.paragraph_restore import (
@@ -67,6 +73,7 @@ from ..utils.search_scope import (
     strip_scope_blocks,
     worker_scope_block,
 )
+from ..utils.literal_scan import scan_synthesis_note
 from ..utils.source_naming import is_legislation, named_in, token_in
 from ..utils import rail_titles
 from ..utils.rail_dedupe import collapse_scheme_duplicates
@@ -239,16 +246,23 @@ async def run_worker_agent(
     # P3.52 (c): the lawyer's latest message after the brief, in the Worker's
     # message only. The log line above and the audit keep the brief as the
     # Manager wrote it; so does every other reader of `query` below.
+    # P3.14: then, for the quick-lookup Worker only, the research filters that
+    # can exclude something (its system prompt never carries the filter block;
+    # see `prompts.quick_lookup_filter_note` for why the note is here).
     messages = [
         {"role": "system", "content": get_worker_system_prompt(research_mode, cfg)},
         {"role": "user", "content": with_lawyer_words(
-            query, cfg.get("_cache_key_query"), research_mode, cfg.get("_chat_mode"))},
+            query, cfg.get("_cache_key_query"), research_mode, cfg.get("_chat_mode"))
+            + quick_lookup_filter_note(research_mode, cfg)},
     ]
 
     # P3.25: the quick-lookup Worker's list omits `get_legislation_text`.
     worker_tools = get_worker_tools(research_mode, cfg.get("_chat_mode"))
     quick_lookup = is_quick_lookup_worker(research_mode, cfg.get("_chat_mode"))
     source_accumulator: list = []
+    # P4.26: the instruments a lookup (held) or a made-under list returned,
+    # apart from the accumulator: lever R's candidates only (`listed_only`).
+    listed_instruments: list = []
     # Limit discovery searches so the model proceeds to Phase 2 instead of looping.
     # Parliamentary modes: three calls to the SP search tools / search_hansard (see
     # _PARLIAMENT_SEARCH_TOOLS in agent_shared), unchanged. P2.7: legislation modes
@@ -285,6 +299,8 @@ async def run_worker_agent(
     # this Worker cut exactly, read back from its own tool results (a memo
     # hit included), so the answer seam can put back one the answer left out.
     handed_paras: list = []
+    # P3.50 (A1): the court's own limits found in the judgments this run read.
+    court_limits: list = []
 
     # P4.24: the exact title each `lookup_legislation` in this run returned,
     # for the Sources rail's bare-id entries. A lookup adds no rail source.
@@ -328,8 +344,14 @@ async def run_worker_agent(
             result_suffix=result_suffix,
             provision_fetches=provision_fetches,
             empty_search_lookup=_empty_search_lookup,
+            listed_accumulator=listed_instruments,
         )
         handed_paras.extend(handed_paragraphs(out))
+        # P3.50 (A1): the court's own limits this Worker was handed, read back
+        # from its tool results (a memo hit included), for the synthesis block
+        # and the answer seam.
+        if name == CASE_LAW_TEXT_TOOL:
+            court_limits.extend(limits_in_text(out))
         return out
 
     # P3.25: the statutory instruments this quick-lookup run has looked up in
@@ -390,6 +412,9 @@ async def run_worker_agent(
             # retried (it falls into the lost-report label below). The Manager,
             # planner, synthesis and the A4 reformat do not pass it.
             worker_call=True,
+            # P1.8: every result comes from `run_worker_tool`, which bounds
+            # the tool's own output; the loop's cap would cut code text.
+            results_bounded=True,
         )
     except BaseException as e:
         # Close the audit delegation on the failure path too — a trace that
@@ -519,6 +544,14 @@ async def run_worker_agent(
         # P4.3 lever R: everything retrieved, for the answer seam to re-admit
         # what the answer cites and no report named (`readmit_answer_sources`).
         result["retrieved_sources"] = retrieved_with_marks(source_accumulator, kept)
+    # P4.26: a lookup's or made-under list's instrument no other tool retrieved,
+    # never in the rail from the report, offered to lever R, which adds it only
+    # where the answer names it.
+    # A separate key, read by lever R alone: P4.23's linker, P3.51's listing
+    # and P4.24's titles read `retrieved_sources` and are unchanged by it.
+    _listed = listed_only(listed_instruments, source_accumulator)
+    if _listed:
+        result["listed_sources"] = _listed
     # P4.24: titles for the rail's bare-id entries (`title_rail_sources`).
     result["retrieved_titles"] = dict(lookup_titles)
 
@@ -552,6 +585,7 @@ async def run_worker_agent(
     # across them, because the footer describes the whole turn.
     result["searches"] = list(search_log)
     result["handed_paragraphs"] = list(handed_paras)
+    result["court_limits"] = dedupe_limits(court_limits)
 
     if _audit:
         _audit.end_delegation(
@@ -660,6 +694,20 @@ def retrieved_with_marks(source_accumulator: list, kept: list) -> list:
     `_kept` if the Worker-seam filter put it in the rail. Lever R's input."""
     kept_ids = {id(src) for src in kept}
     return [{**src, "_kept": id(src) in kept_ids} for src in source_accumulator]
+
+
+def listed_only(listed: list, source_accumulator: list) -> list:
+    """P4.26: the instruments a lookup or made-under list returned (`listed`,
+    from `agent_shared._extract_listed_instruments`) that no other tool of the
+    run put in the accumulator, marked not kept, for lever R. An instrument the
+    accumulator holds is left to its own entry (titled, possibly kept), so the
+    rail never holds it twice. Never raises."""
+    try:
+        have = {s.get("_lid") for s in source_accumulator if s.get("_lid")}
+        return [{**s, "_kept": False} for s in listed if s.get("_lid") not in have]
+    except Exception as e:  # Invariant 5
+        logger.warning("[Sources] Listed instruments skipped: %s", e)
+        return []
 
 
 def readmit_answer_sources(rail: list, retrieved: list, answer: str,
@@ -891,6 +939,29 @@ async def draft_research_plan(
 
 RESEARCH_RESULT_PREFIX = "[Research Agent Result]\n"
 
+# P4.8: the prefix above labels a delegation's report for the MANAGER, and in
+# research mode the Manager is told to pass the report through verbatim, so it
+# sometimes copied the label too: over every stored replay directory (90, 2,682
+# answered turns) 7 answers opened with `[Research Agent Result]`, every one a
+# Research-mode turn whose answer was the label and the report it heads; none
+# in Conversational or Deep Research. Code never writes the label into an
+# answer, so every copy is an echo, and it is removed at the Manager return
+# whatever its position, with backticks round it and the line break after it.
+# Same shape as P2.1's halt-marker strip and P2.2's scope-block strip: what the
+# Manager receives is unchanged.
+_RESULT_LABEL = re.compile(r"(`?)\[Research Agent Result\]\1[ \t]*(?:\r?\n)?")
+
+
+def strip_result_label(text: str) -> tuple:
+    """Remove every `[Research Agent Result]` label from an answer. Returns
+    (text, count); `text` unchanged, byte for byte, when there is none."""
+    if not text or "[Research Agent Result]" not in text:
+        return text, 0
+    out, n = _RESULT_LABEL.subn("", text)
+    if n:
+        out = re.sub(r"\n{3,}", "\n\n", out).strip()
+    return out, n
+
 
 def worker_result_for_manager(content: str, cfg: dict, retrieved_urls=None) -> str:
     """The `delegate_research` tool result the Manager is handed.
@@ -986,6 +1057,9 @@ async def process_user_request(
     accumulated_sources: list = []
     # P4.3 lever R: every source every delegation retrieved, marked kept or not.
     retrieved_sources: list = []
+    # P4.26: the instruments lookups and made-under lists returned that no other
+    # tool did, for lever R alone (`listed_only`).
+    listed_sources: list = []
     # P4.24: the exact titles every delegation's lookups returned.
     retrieved_titles: dict = {}
     # P2.2 (B5): every legislation search this turn ran, across ALL delegations,
@@ -1038,6 +1112,8 @@ async def process_user_request(
     # P3.12 (answer seam): every schedule paragraph code handed any Worker of
     # this turn cut exactly, read once the answer is written.
     handed_paras: list = []
+    # P3.50 (A1): the court's own limits in the judgments any Worker read.
+    court_limits: list = []
 
     async def manager_tool_executor(name: str, args: dict) -> str:
         if name == "delegate_research":
@@ -1097,6 +1173,7 @@ async def process_user_request(
                 if not _is_duplicate_source(src, accumulated_sources):
                     accumulated_sources.append(src)
             retrieved_sources.extend(result.get("retrieved_sources") or [])
+            listed_sources.extend(result.get("listed_sources") or [])
             for _lid, _t in (result.get("retrieved_titles") or {}).items():
                 retrieved_titles.setdefault(_lid, _t)
             if result.get("halted"):
@@ -1110,6 +1187,7 @@ async def process_user_request(
                 if result.get("halted") else "complete")
             all_searches.extend(result.get("searches") or [])
             handed_paras.extend(result.get("handed_paragraphs") or [])
+            court_limits.extend(result.get("court_limits") or [])
             # P4.5: a lost report is a label, not research, so P4.2's fallback
             # must not reproduce it to the lawyer as findings.
             if (result.get("content") or "").strip() and not result.get("lost"):
@@ -1163,6 +1241,15 @@ async def process_user_request(
         manager_call=True,
         manager_report_in_hand=lambda: bool(worker_reports),
     )
+
+    # P4.8: the label the Manager's tool results carry, copied into its answer,
+    # removed first: above P4.2, so an answer that was the label alone reads as
+    # the empty answer it is and gets the research in hand; above every pass
+    # that reads the answer's opening (the agreement-opener strip).
+    if final.get("content"):
+        final["content"], _labels = strip_result_label(final["content"])
+        if _labels:
+            logger.info("[Manager] Removed %d copied research-result label(s)", _labels)
 
     # P4.2 (B13). Last line of defence, above every strip below - all of which
     # are no-ops on an empty body, so without this the scope footer is appended
@@ -1237,6 +1324,31 @@ async def process_user_request(
                 clean, manager_inputs, retrieved_sources, retrieved_titles)
             if _linked:
                 logger.info("[Manager] Linked %d instrument(s) named in words", _linked)
+            # P3.48 (user decision): an instrument the answer names that the
+            # turn's made-under record shows as revoked, in whole or in part,
+            # and that the answer does not mark, is marked after its first
+            # mention. After P4.23, so a revoking instrument the mark names
+            # is never linked; above P1.6 and lever R.
+            clean, _marks = mark_revoked_instruments(clean, all_searches)
+            if _marks:
+                logger.info("[Manager] Marked %d recorded revocation(s)", _marks)
+            # P3.50 (A1): a judgment the answer names whose own limit on its
+            # decision (found by code in the text a Worker read) the answer
+            # does not carry gets the court's words back, after the paragraph
+            # that names it. "Also in" notes, so the passes above never read it.
+            clean, _limits = restore_court_limits(clean, court_limits)
+            if _limits:
+                logger.info("[Manager] Restored %d court's own limit(s)", _limits)
+            # P3.51 / P3.52 (A2): the record's instruments made under a
+            # section the answer cites that it does not name, listed at its
+            # end. Legislation research types only; no database until the
+            # record is loaded; byte-identical where nothing is listed.
+            if research_mode in ("legislation_only", "legislation_and_case_law"):
+                clean, _mu_lines = await list_made_under_for_answer(
+                    clean, retrieved_sources, retrieved_titles)
+                if _mu_lines:
+                    logger.info("[Manager] Listed %d made-under line(s) for cited sections",
+                                _mu_lines)
     # P1.6 (B14) belt and braces. The Worker's report was already enforced, but
     # the Manager is instructed to pass it through verbatim and is not compelled
     # to — and in conversational mode it answers in its own words. Idempotent, so
@@ -1324,8 +1436,16 @@ async def process_user_request(
     # P4.3 lever R: a source the answer cites that no report vouched for. Read
     # against the answer as the lawyer sees it, before the scope footer, which
     # names searched instruments in code's words, not the answer's.
+    # P4.26: with the lookups' and made-under lists' instruments, after every
+    # other source, so an instrument another tool retrieved keeps its own entry.
+    # A made-under list cuts a long title, which then names nothing; P4.24's
+    # fill gives such an entry its full title first, so the answer naming the
+    # instrument by its title is read as naming it.
+    if listed_sources:
+        listed_sources = await title_rail_sources(
+            listed_sources, retrieved_sources, retrieved_titles)
     _readmitted = readmit_answer_sources(
-        accumulated_sources, retrieved_sources, clean, research_mode)
+        accumulated_sources, retrieved_sources + listed_sources, clean, research_mode)
     if _readmitted:
         logger.info("[Manager] Re-admitted %d source(s) the answer cites", len(_readmitted))
         accumulated_sources.extend(_readmitted)
@@ -1402,7 +1522,8 @@ def _last_user_content(messages: list) -> str:
 
 
 def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
-                      earlier_reports: Optional[list] = None) -> str:
+                      earlier_reports: Optional[list] = None,
+                      earlier_searches: Optional[list] = None) -> str:
     """Build a self-contained worker brief for one approved plan step.
 
     The Worker has no access to the conversation or the rest of the plan, so the
@@ -1419,6 +1540,12 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
     recognises: the pattern missed a step that worked on the list
     (`wave4_b11_sweep`), and that step dropped an instrument. It sits before
     the CONTEXT sentence, which stays the brief's last word.
+
+    P3.57 follow-up: `earlier_searches` are the scope records of the steps
+    already run. Where one holds a text scan by code of a made-under list,
+    a sibling line after P3.10's says what it read and found, and that a
+    section search's not returning the string is not evidence against it
+    (`step_handover.scan_handover_line`). Without a scan, nothing is added.
     """
     parts = [f"RESEARCH TASK: {step['title']}"]
     detail = step.get("detail") or ""
@@ -1433,6 +1560,12 @@ def _build_step_brief(step: dict, approved_plan: dict, user_query: str,
         line = handover_line(earlier_reports)
         if line:
             parts.append(line)
+    if earlier_searches:
+        from ..utils.step_handover import scan_handover_line
+
+        scan_line = scan_handover_line(earlier_searches)
+        if scan_line:
+            parts.append(scan_line)
     if user_query:
         parts.append(
             "CONTEXT: This task is one step of a wider research plan answering the "
@@ -1451,8 +1584,14 @@ def build_synthesis_messages(
     research_mode: str = "legislation_only",
     lost: Optional[list] = None,
     searches: Optional[list] = None,
+    court_limits: Optional[list] = None,
 ) -> list:
     """The Deep Research synthesis call's messages, from the steps' findings.
+
+    `court_limits` (P3.50, A1): the passages in which a judgment a step read
+    limits its own decision, found by code in its text; handed over for each
+    judgment a step report names, because the synthesis never reads the
+    judgment. None adds nothing.
 
     `searches` (every step's scope record) carries P3.53's list-coverage note:
     one step may list what a later step searches, so the line is computed over
@@ -1486,11 +1625,17 @@ def build_synthesis_messages(
         f"STEP FINDINGS:\n\n" + "\n\n---\n\n".join(findings_blocks)
     )
     synthesis_user += pinpoint_block([f["content"] for f in step_findings])
+    if court_limits:
+        synthesis_user += court_limits_block(court_limits,
+                                             [f["content"] for f in step_findings])
     synthesis_user += incomplete_steps_note(
         halts or [], steps_count if steps_count is not None else len(step_findings),
         lost=lost,
     )
     synthesis_user += list_coverage_note(searches)
+    # P3.57 follow-up: a text scan's result stands over a step's ranked
+    # section search that did not return the string. "" without a scan.
+    synthesis_user += scan_synthesis_note(searches)
     return [
         {"role": "system", "content": get_deep_research_synthesis_prompt(research_mode)},
         {"role": "user", "content": synthesis_user},
@@ -1533,6 +1678,9 @@ async def run_deep_research(
     accumulated_sources: list = []
     # P4.3 lever R: every source every step retrieved, marked kept or not.
     retrieved_sources: list = []
+    # P4.26: the instruments lookups and made-under lists returned that no other
+    # tool did, for lever R alone (`listed_only`).
+    listed_sources: list = []
     # P4.24: the exact titles every step's lookups returned.
     retrieved_titles: dict = {}
     # Per-request tool-result memo: plan steps run as isolated workers, so two
@@ -1558,6 +1706,8 @@ async def run_deep_research(
     # P2.2 (B5): every legislation search the plan ran, across all steps, and
     # (P2.4) every case-law search.
     all_searches: list = []
+    # P3.50 (A1): the court's own limits in every judgment any step read.
+    dr_court_limits: list = []
 
     for i, step in enumerate(steps, 1):
         if cancel_event and cancel_event.is_set():
@@ -1575,7 +1725,8 @@ async def run_deep_research(
         # P3.10: the steps already run, so a step that works on their list is
         # handed it. A lost step's content is its label and names no instrument.
         brief = _build_step_brief(step, approved_plan, user_query,
-                                  [f["content"] for f in step_findings])
+                                  [f["content"] for f in step_findings],
+                                  list(all_searches))
         logger.info(f"[DeepResearch] Step {i}/{len(steps)}: {title}")
         # run_worker_agent opens the audit delegation, but only this loop knows
         # the step number and the approved title — hand them over first.
@@ -1612,9 +1763,11 @@ async def run_deep_research(
             if not _is_duplicate_source(src, accumulated_sources):
                 accumulated_sources.append(src)
         retrieved_sources.extend(result.get("retrieved_sources") or [])
+        listed_sources.extend(result.get("listed_sources") or [])
         for _lid, _t in (result.get("retrieved_titles") or {}).items():
             retrieved_titles.setdefault(_lid, _t)
         all_searches.extend(result.get("searches") or [])
+        dr_court_limits.extend(result.get("court_limits") or [])
 
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError("Aborted")
@@ -1623,7 +1776,7 @@ async def run_deep_research(
     synthesis_messages = build_synthesis_messages(
         user_query, approved_plan, step_findings, halts, len(steps),
         research_mode=_get_cfg().get("_research_mode") or "legislation_only",
-        lost=lost, searches=all_searches,
+        lost=lost, searches=all_searches, court_limits=dr_court_limits,
     )
 
     async def _no_tools_executor(name: str, args: dict) -> str:
@@ -1669,6 +1822,14 @@ async def run_deep_research(
     # before P1.6's link note can be appended after it, which would leave it
     # out of reach of the trailing-only strip before the real footer.
     final["content"] = strip_answer_footer(final["content"])
+    # P3.50 (A1): as on the conversational Manager's path, a judgment the
+    # report names gets the court's own limit back where the report does not
+    # carry it. Not on a fallback built from the step findings.
+    if (not final.get("synthesis_failed")
+            and _get_cfg().get("_research_mode") not in _RAIL_FALLBACK_MODES):
+        final["content"], _limits = restore_court_limits(final["content"], dr_court_limits)
+        if _limits:
+            logger.info("[DeepResearch] Restored %d court's own limit(s)", _limits)
 
     # P1.6 (B14). The synthesis call composes its own prose from the step
     # reports, so a provision link the steps never carried can appear here for
@@ -1734,8 +1895,11 @@ async def run_deep_research(
 
     # P4.3 lever R, as on the Manager path: the synthesis names instruments a
     # step's scope block listed and no step report did (408 stored misses).
+    if listed_sources:   # P4.26, as on the Manager path
+        listed_sources = await title_rail_sources(
+            listed_sources, retrieved_sources, retrieved_titles)
     _readmitted = readmit_answer_sources(
-        accumulated_sources, retrieved_sources, _content,
+        accumulated_sources, retrieved_sources + listed_sources, _content,
         _dr_cfg.get("_research_mode") or "legislation_only")
     if _readmitted:
         logger.info("[DeepResearch] Re-admitted %d source(s) the report cites", len(_readmitted))

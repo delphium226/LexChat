@@ -10073,3 +10073,87 @@ and P3.46's note in use and, on `main`, the traversal fix), the Fix Tracker (v54
 **Take next:** P3.48's answer-seam mark (wording first), P3.34, P3.28's instruction; the selection/synthesis
 lever for P3.50-P3.52 is the user's to time. **The user's, on the target:** pull `v2026.10.5` and restart; the
 traversal follow-ups (HTTP log check for `..`, `%2e`, `%5c`, `/C:`; a real `JWT_SECRET` by `setx /M`).
+
+## Session 52 (director model) — 2026-10-30 to 2026-11-02 — P1.8, P3.34, P3.48, P3.50, P4.20 done; P3.51/P3.52 parked ($19.01)
+
+Director in this session; workers in hand-made worktrees (`F:/LexChat-worktrees/<row>`), never pushing; the
+director alone merged, ran paid replays one at a time and wrote the records.
+
+- **P4.20** (worker `p420`, merged `5eedf2f`): one list of change records in the footer, up to 8, marks in
+  brackets; user decisions 'commencement or removal' (not 'repeal') and 8. Dry run 212 to 0 footers naming two
+  lists. Ticked (deterministic acceptance).
+- **P3.34** (worker `p334`, merged before P4.20): `find_definitions` for the research Workers. `wave5_p334`
+  ($5.77): 6341 t7 15-18 of 28 reference definers (before 0-11), 6384 5 of 5 x3, 6363 0 of 1 (the tool listed
+  the England-and-Wales definer; the answer gave the Scottish ones), control passes. Ticked.
+- **P1.8** (found by the director checking a P3.34 follow-up; worker `p18`, merged `0b6fca2`): the chat loops'
+  last-resort cap cut code text off the end of 318 Worker tool results (the made-under CURRENCY block whole in
+  75 of 75, P3.51's families, scope notes, P3.12's fetched units) and 6 Manager reports; never the tool's own
+  data. The fix bounds the tool's body before code text is appended. Measurements found taken with text cut:
+  P3.51's acceptance (its block cut in 3 of 3), P3.48's s51 sweep, P3.12 in two sweeps. `wave5_p18` ($8.19):
+  no cut, notes whole, no regression; P3.48 marked by hand in every 6383 answer; P3.53 6 of 6 by hand. Ticked
+  at P1.
+- **P3.50, Fix A** (worker `levA`, merged with Fix B reverted): the court's own limit (Worker block, synthesis
+  block, answer line; user choices: kind 0 only in the answer, 450 characters); instruments made under a cited
+  section listed at the end of a conversational answer; P3.51's block keyed on an inserted section. Seam: Q12
+  synthesis cites [43] 6 of 6 with the block, 0 of 6 without ($0.72). Fix B (a quick-lookup Worker rule, two
+  wordings) s.38 led 1 of 3 either way, held ($1.04). `wave5_levA` ($2.08): Q12 3 of 3 (ticked); Q16 Order 1 of
+  3; Q17 s.38 1 of 3.
+- **Thomas's 18 September items triaged** ($0, `evidence/seam/s52/tbv/`): NH2 closed (P3.53, watch item);
+  item 1 closed (P2.3, P3.31); item 4 booked as P3.57; the summariser's invented '£151' booked as P3.58.
+- **Brief scoping** ($0, `evidence/seam/s52/brief/`): Q17's brief has not named the concession scheme since
+  lever (a) (0 of 16); the Worker copies the 2005 Act's long title into its first section search (12 of 16).
+  Q16's duty-first briefs are a variable. **Fix 2** (worker `lev2`): a power question briefed as a search for
+  the power; seam 9 of 9 power-first against 0 of 9, panel clean ($0.41); `seam_replay manager --without-fix`
+  had applied P3.2's live hint on the without side since `42d6210`, fixed. **Fix 1** (worker `lev1`): code
+  section searches on the legal professional's own words after the first Act search. `wave5_lev12` ($0.80):
+  Fix 2 briefs power-first 3 of 3, Order 0 of 3; Fix 1 showed s.38 3 of 3, cited 0 of 3. **User decisions:**
+  Fix 1 removed (`3eb783b`); Fix 2 kept, not met; P3.51 and P3.52 parked in progress (the Worker's choice of
+  provision; Fix 3 or another research model are the user's to time).
+- **Fix Tracker** v56 at the user's request.
+- **Sweeps:** `replay check`/`pin`/`restore` around each of `wave5_p334`, `wave5_p18`, `wave5_levA`,
+  `wave5_lev12`; uvicorn and keep-awake by `Start-Process -PassThru`, both stopped each time.
+
+**Take next:** P3.57, P3.58 (measure first), P3.28's instruction, P3.34's follow-ups. **The user's, on the
+target:** pull `v2026.10.5` and restart; the traversal follow-ups (HTTP log check; a real `JWT_SECRET`).
+
+### Session 52, continued (2026-11-02) — the issues list (user's focus): P3.28, P3.29, P3.57, P3.58, P4.8, P4.25, P4.26 done ($9.72)
+
+The user asked to set target-server follow-ups aside and work the issues list. Five workers in parallel worktrees, then
+merges one at a time with the full suite after each (4,686 → 4,840).
+- **P3.57** (Thomas's '£' scan; workers `p357`, `p357b`): ground truth corrected to 20 of 37 (two '£' counted from a
+  summariser's prose); code reads every listed instrument when the question asks for a literal (scan read 30 s, user
+  decision). `wave5_p357` ($3.91): 6383 3 of 3 clean; 6382 named all 20 but called SSI 2025/340 a 'discrepancy' 3 of 3
+  (a later step's ranked search did not return its '£'). Follow-up (brief line, search note, synthesis note):
+  `wave5_p357b` ($1.73) 6382 3 of 3 and 6383 1 of 1 clean. Done.
+- **P3.58** (worker `p358`): 7 invented amounts in 5 of 6,783 stored summaries ('£151' reached two answers); removed
+  P3.45's way; the dry run is the acceptance (user decision). Done.
+- **P3.29, P4.8** (worker `p329`): appeal detector 317 flagged → 107 (105 genuine); the leaked label removed after the
+  Manager writes, 0 in this session's sweeps. Done.
+- **P4.25, P4.26** (worker `p425`): the rail shows only the selected answer's sources ('None for this answer', checked
+  by the director in the browser on chat 5); lookup and made-under instruments the answer names reach the rail (607 in
+  86 stored turns). Done; **B8 closed**.
+- **P3.28** (worker `p328`): `_IN_FORCE_RULE` (b) reads the removal classes; seam inconclusive ($0.20); `wave5_p328`
+  ($3.88) 6375 3 of 3 with no misclassified removal. Done.
+- **Spend:** P3.28 seam $0.20 + `wave5_p357` $1.46 (6383) + `wave5_p328` $3.88 + `wave5_p357` $2.45 (6382) + `wave5_p357b` $1.38 + $0.35 = $9.72.
+- FIX_PLAN: 93 of 115, 2 in progress (P3.51, P3.52 parked), 9 of 14 buckets. Worktrees removed; `lev1`, `levB2` kept.
+
+## Session 52, continued (director model) — 2026-11-03 — P3.14, P4.9, P4.27, P4.28 done; P3.34 follow-ups; P4.29 booked ($3.29)
+
+- **P3.34 and P4.26 follow-ups** (worker `p334f`, merged `558184b`): placeholder rows left out of `find_definitions`
+  and counted; a P3.38-read instrument gets a rail entry where the answer names it (25 of 25 by dry run).
+- **P4.9 and P4.27** (worker `p409`, merged `fb6f7d8`): the in-thread mode-change marker (user decisions: as built,
+  not on the parliamentary bots) and the Jurisdiction filter's line. Checked in the browser on a local test chat
+  (deleted after). Done.
+- **P3.14** (worker `p314`, merged `c8aee0a`): user decisions 'set by the legal professional', no 'answer for X'
+  clause. Seam `--as-sent` ($0.67 + $0.36 re-draw): 6357 4 of 4 on the filters (without: 'This index does not hold'
+  1 of 2); 6354's link loss was one upstream-repeated draw (re-drawn 6,6,0,5 vs 9,6,0,5). Done.
+- **P4.28** (new row; worker `p4pid`, merged `9c8cd5a`): a placeholder id never a rail source (199 to 0) nor named
+  in a scope text; kept, marked, for the Worker, because LEX accepts it as a section-search key (6387's 1860 Act
+  s.XII, checked by hand). User decisions: keep marked, the wording, no rail entry. Done. **P4.29** booked.
+- **`find_definitions` in Conversational** (`wave5_p334q_A` $1.55, two heavy empties; `_B` $0.71): definers 2,2,2 to
+  3,3,3 of 5 and 1,1,1 to 3,3,2 of 28; 0 unverified; control clean; the count dropped by the Manager 6 of 6. User
+  decision: offer it and put the count in the footer by code (worker `p334c`, merged `28b7f4e`; 13 of 2,530
+  footers change).
+- **Thomas's items still open:** P3.52, P3.51 (parked), P3.3 (blocked). The tracker still shows P3.57 as Verified.
+- **Spend:** $1.03 (P3.14 seam) + $2.26 (`wave5_p334q`) = $3.29.
+- FIX_PLAN: 97 of 117, 2 in progress (P3.51, P3.52 parked), 9 of 14 buckets.

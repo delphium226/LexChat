@@ -184,6 +184,55 @@ WORKER_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "find_definitions",
+            # P3.34 (B11). "Every statutory definition of X" was answered from
+            # whichever instruments the Worker happened to search within: 0 to
+            # 12 of the instruments defining "shop" per stored 6341 answer. One
+            # corpus-wide section search, filtered in code to the rows that
+            # define the term, reached more than any stored run on every turn
+            # measured (`notes/batch13_G.md`). Offered to the quick-lookup
+            # Worker too since the P3.34 follow-up (see
+            # `QUICK_LOOKUP_WITHHELD_TOOLS`).
+            "description": (
+                "Find where a term is defined in legislation: searches all legislation in the "
+                "index once and lists the provisions that put the term in quotation marks "
+                "followed by a defining word ('\"shop\" means ...', '\"shop\" has the meaning "
+                "given in ...'), each with its defining words, provision link and stated "
+                "extent. Use it when the question asks where or how a term is defined, or for "
+                "every statutory definition of a term. It is one search, not a census: a "
+                "definition worded another way may be missing, so never present its list as "
+                "every definition there is."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "term": {
+                        "type": "string",
+                        "description": (
+                            "The term exactly as it would appear in quotation marks in a "
+                            "definition, without the quotation marks (e.g. 'shop', "
+                            "'interdict', 'occupier')."
+                        ),
+                    },
+                    "jurisdiction": {
+                        "type": "string",
+                        "enum": ["scotland", "england_and_wales", "wales",
+                                 "northern_ireland", "uk_wide"],
+                        "description": (
+                            "Optional. Leave out instruments whose stated extent does not "
+                            "include this jurisdiction; instruments whose extent the index does "
+                            "not state are kept and marked. The user's jurisdiction filter, "
+                            "where set, applies instead."
+                        ),
+                    },
+                },
+                "required": ["term"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_legislation_sections",
             "description": (
                 "Search for specific sections within a known piece of legislation. "
@@ -783,6 +832,17 @@ _WESTMINSTER_TOOL_NAMES = {t["function"]["name"] for t in WESTMINSTER_TOOLS}
 # come through `lookup_legislation`, which code runs on every statutory
 # instrument this Worker searches within (`instrument_lookup.
 # section_search_lookup`). The research Workers keep the tool.
+#
+# P3.34 withheld `find_definitions` here too at first, and its follow-up
+# offers it (user decision, Session 52). Measured as an A/B on the stored
+# definition-list turns at n=3 (`wave5_p334q_A` withheld, `wave5_p334q_B`
+# offered, nothing else changed): reference definers cited 2,2,2 -> 3,3,3 of 5
+# on 6384 t1 and 1,1,1 -> 3,3,2 of 28 on 6341 t2, no definition cited that the
+# tool's result did not hold, and no call on the control (6409 t1). This
+# Worker's prompt does not name the tool (the B arm had no
+# `_DEFINITIONS_TOOL_LINE`); the tool's description is all it is told. The
+# answers gave 2 to 4 of the 30 as "several", so the footer says how many the
+# search found (`search_scope._definitions_found`).
 QUICK_LOOKUP_WITHHELD_TOOLS = ("get_legislation_text",)
 
 

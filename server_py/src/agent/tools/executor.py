@@ -24,6 +24,14 @@ from ...utils.instrument_lookup import (
     lookup_args,
 )
 from ...utils.made_under import MADE_UNDER_TOOL
+from ...utils.definitions import (
+    DEFINITIONS_JURISDICTIONS,
+    DEFINITIONS_SIZE,
+    DEFINITIONS_TOOL,
+    build_result as build_definitions_result,
+    definitions_query,
+    instrument_ids,
+)
 from ...utils.redact import redact_args
 from ...utils import schedule_units
 from ..provider_factory import get_request_provider_config
@@ -552,6 +560,68 @@ async def execute_worker_tool(
                 from ...services.made_under_store import query as made_under_query
                 result = await made_under_query(str(args.get("act") or ""),
                                                 str(args.get("section") or ""))
+                return json.dumps(result, ensure_ascii=False)
+
+            elif name == DEFINITIONS_TOOL:
+                # P3.34: one corpus-wide section search (no `legislation_id`)
+                # for the quoted term and a defining verb, filtered in code to
+                # the rows that define the term (`utils/definitions.py`). The
+                # raw 300 rows (0.5-1.6 MB) never reach the model.
+                term = str(args.get("term") or "").strip()
+                if not term:
+                    return json.dumps({"tool": DEFINITIONS_TOOL, "error": "term is required"})
+                cfg = get_request_provider_config()
+                jurisdiction = cfg.get("_jurisdiction") or None
+                if not jurisdiction and args.get("jurisdiction") in DEFINITIONS_JURISDICTIONS:
+                    jurisdiction = args["jurisdiction"]
+                url = f"{LEX_API_URL}/legislation/section/search"
+                payload = {"query": definitions_query(term), "size": DEFINITIONS_SIZE}
+                # The user's year filters are enforced as `search_legislation`
+                # enforces them, by the API; absent, the payload is exactly
+                # the one batch 13 G measured.
+                if cfg.get("_year_from"):
+                    payload["year_from"] = cfg["_year_from"]
+                if cfg.get("_year_to"):
+                    payload["year_to"] = cfg["_year_to"]
+
+                await _emit(on_chunk, {
+                    "type": "api_call_start",
+                    "id": call_id,
+                    "url": url,
+                    "method": "POST",
+                    "payload": payload,
+                })
+                t0 = time.perf_counter()
+                resp = await _request_with_retry(client, "POST", url, name=name, json=payload)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                if timing_collector:
+                    timing_collector.record_lex_api_call(name, elapsed_ms)
+                try:
+                    resp_json = resp.json()
+                except Exception:
+                    resp_json = {"text": resp.text}
+                await _emit(on_chunk, {
+                    "type": "api_call_end",
+                    "id": call_id,
+                    "url": url,
+                    "status": resp.status_code,
+                    "response": resp_json,
+                    "elapsed_ms": round(elapsed_ms),
+                })
+                resp.raise_for_status()
+                # P4.24's source of titles (the made-under record), where it is
+                # loaded; no title otherwise, and the block says what to do.
+                titles = {}
+                try:
+                    from ...services.made_under_store import titles_for
+                    titles = await titles_for(instrument_ids(resp_json))
+                except Exception:
+                    titles = {}
+                result = build_definitions_result(
+                    resp_json, term, jurisdiction=jurisdiction,
+                    legislation_type=cfg.get("_legislation_type") or None,
+                    titles=titles, year_from=payload.get("year_from"),
+                    year_to=payload.get("year_to"))
                 return json.dumps(result, ensure_ascii=False)
 
             elif name == LOOKUP_TOOL:

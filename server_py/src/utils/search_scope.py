@@ -86,6 +86,8 @@ from .instrument_lookup import (
     parse_lookup_result,
 )
 from .published_text import published_footer_clause, published_limb
+from .literal_scan import SCAN_ENTRY, scan_footer, scan_limb
+from .placeholder_ids import is_placeholder_id, split_placeholders, unidentified_phrase
 from .removal_effects import (
     PROVISION_KEY,
     QUALIFIED_KEY,
@@ -132,6 +134,7 @@ __all__ = [
     "record_not_held",
     "record_lookup",
     "lookup_scope_footer",
+    "record_definitions",
 ]
 
 # Measured with `python -m tools.lex_probe --coverage`, which also runs the
@@ -409,6 +412,17 @@ def legislation_search_note(
     )
 
 
+# P4.28: the one sentence a section search of a placeholder-id record adds.
+# Its rows' `uri`s are built on the placeholder, so none of them links to the
+# instrument; the title the search row gave is all that names it.
+_UNIDENTIFIED_SECTION_CLAUSE = (
+    " The index holds no identifiable reference for this instrument: the "
+    "legislation_id you searched by is a placeholder, not a citation. Cite it by "
+    "its title only, never by that id or by a uri in these rows, which do not "
+    "link to it."
+)
+
+
 def section_search_note(args: dict, data: Any) -> str:
     """The scope block appended to every `search_legislation_sections` result.
 
@@ -434,6 +448,11 @@ def section_search_note(args: dict, data: Any) -> str:
     query = str(args.get("query") or "").strip()
     query_phrase = f'"{query[:200]}"' if query else "(no query given)"
     leg = str(args.get("legislation_id") or "").strip() or "this instrument"
+    # P4.28: a placeholder id is LEX's key for the record, not a reference, so
+    # the block does not repeat it, and says how the instrument may be cited.
+    unidentified = ""
+    if is_placeholder_id(leg):
+        leg, unidentified = "this instrument", _UNIDENTIFIED_SECTION_CLAUSE
 
     results = d.get("results")
     shown = len(results) if isinstance(results, list) else d.get("returned")
@@ -453,7 +472,7 @@ def section_search_note(args: dict, data: Any) -> str:
             "it. Do NOT state that a provision, power or duty is absent from "
             f"{leg} on the strength of this result, and do NOT speculate about "
             f"why a provision was not returned.{enabling}{_RELATION_ROUTE_CLAUSE} If you report something "
-            "as not found, say what was searched for and in which instrument.]"
+            f"as not found, say what was searched for and in which instrument.{unidentified}]"
         )
     return (
         f"\n\n[SEARCH SCOPE — 0 provisions of {leg} matched {query_phrase}. That "
@@ -908,6 +927,19 @@ def record_made_under(log: Optional[list], data: Any) -> None:
                 if st == "partly":
                     named["partly"].append(lid)
             entry["revoked_ids"] = named
+            # P3.48 (answer seam): each listed instrument the record shows as
+            # revoked in whole or in part, with its title and the record's
+            # line, so `utils.revocation_marks` can mark it where the answer
+            # names it unmarked.
+            entry["revoked"] = {
+                str(i.get("legislation_id"))[:60]: {
+                    "status": i.get("revocation_status"),
+                    "title": str(i.get("title") or "")[:200],
+                    "line": str(i.get("revocation") or "")[:400],
+                    "checked": rv.get("checked")}
+                for i in d.get("instruments") or []
+                if i.get("legislation_id") and i.get("revocation_status") in (
+                    "revoked", "revoked_undated", "revoked_later", "partly")}
         log.append(entry)
     except Exception:
         pass
@@ -1005,7 +1037,189 @@ def _made_under_footer_clause(entries: Optional[list]) -> str:
     return (
         f" The record of enabling powers consulted here covers {cov}; anything "
         "outside that coverage was not checked." + revoked + _list_coverage_footer(entries)
+        + scan_footer(entries)
     )
+
+
+# ---------------------------------------------------------------------------
+# P3.34 — the definitions search (`find_definitions`)
+# ---------------------------------------------------------------------------
+#
+# One corpus-wide section search for where a term is defined
+# (`utils/definitions.py`). The Manager, the Deep Research synthesis and the
+# legal professional never see its result, and a list of definitions read
+# without its edge is how "these are all the statutory definitions" gets
+# written. So each run is recorded (`record_definitions`), and the limb and the
+# footer clause say what was searched. Every text here is gated on an entry the
+# tool wrote: a turn that did not run it is byte-identical.
+DEFINITIONS_ENTRY = "definitions_search"
+_MAX_DEFINITION_TERMS = 3
+
+
+def record_definitions(log: Optional[list], name: str, args: dict, data: Any) -> None:
+    """Record one `find_definitions` result. Self-gated on the tool name;
+    an error string is recorded as not ok. Never raises."""
+    if log is None:
+        return
+    try:
+        from .definitions import DEFINITIONS_TOOL, parse_result
+
+        if name != DEFINITIONS_TOOL:
+            return
+        d = parse_result(data)
+        if d is None or d.get("error"):
+            log.append({"tool": DEFINITIONS_ENTRY, "ok": False,
+                        "term": str((args or {}).get("term") or "")[:80]})
+            return
+        entry = {
+            "tool": DEFINITIONS_ENTRY, "ok": True,
+            "term": str(d.get("term") or "")[:80],
+            "query": str(d.get("query") or "")[:120],
+            "rows": int(d.get("rows_read") or 0),
+            "count": int(d.get("count") or 0),
+            "listed": int(d.get("listed") or 0),
+            "not_stated": int(d.get("extent_not_stated") or 0),
+            "removed": int(d.get("removed_by_filters") or 0),
+            "longer": int(d.get("longer_terms_count") or 0),
+            "jurisdiction": str(d.get("jurisdiction") or "")[:40],
+        }
+        # P3.34 follow-up: records whose id is a placeholder, never listed.
+        if d.get("unidentified"):
+            entry["unidentified"] = int(d.get("unidentified") or 0)
+        log.append(entry)
+    except Exception:
+        pass
+
+
+def _definitions_rows(log: Optional[list]) -> list:
+    return [e for e in (log or []) if isinstance(e, dict) and e.get("tool") == DEFINITIONS_ENTRY]
+
+
+def _definitions_limb(log: Optional[list]) -> str:
+    """The worker-block line: what the definitions search read and kept. ""
+    when the tool did not run."""
+    rows = _definitions_rows(log)
+    if not rows:
+        return ""
+    parts = []
+    for e in rows:
+        term = str(e.get("term") or "").replace('"', "'")
+        if not e.get("ok"):
+            parts.append(f'for "{term}" it did not complete, so it established nothing')
+            continue
+        unidentified = (f", and {e.get('unidentified')} more in records the index does not "
+                        "identify, not listed" if e.get("unidentified") else "")
+        if not e.get("count"):
+            read = (f"none of the {e.get('rows')} provision(s) it read defines the term in "
+                    "quotation marks" if e.get("rows") else "the search returned no provisions")
+            if unidentified:
+                read = (f"none of the {e.get('rows')} provision(s) it read defines the term in "
+                        "quotation marks in an instrument the index identifies (there were "
+                        f"{e.get('unidentified')} in records the index does not identify, "
+                        "not listed)")
+            parts.append(f'for "{term}" {read}, which is not evidence that no legislation '
+                         "defines it")
+            continue
+        bits = [f'for "{term}" {e.get("count")} instrument(s) define the term in quotation marks '
+                f'among the {e.get("rows")} provisions it read{unidentified}']
+        if e.get("listed", 0) < e.get("count", 0):
+            bits.append(f"{e.get('listed')} of them listed to the research agent")
+        if e.get("not_stated"):
+            bits.append(f"{e.get('not_stated')} with no extent stated in the index")
+        if e.get("jurisdiction"):
+            bits.append(f"{e.get('removed')} left out as stated to extend outside "
+                        f"{e.get('jurisdiction')}")
+        if e.get("longer"):
+            bits.append(f"{e.get('longer')} definition(s) of longer terms containing it "
+                        "noted apart")
+        parts.append(", ".join(bits))
+    return (
+        "Definitions search run (one search of all legislation in the index): "
+        + "; ".join(parts) + ". It read only the provisions that best matched its wording, "
+        "so it is not a census: never say a list from it is every definition of the term, "
+        "or that no other legislation defines it."
+    )
+
+
+def _definitions_term_list(rows: list) -> list:
+    """The searched terms, once each (case-insensitively), in search order."""
+    terms = []
+    for e in rows:
+        t = str(e.get("term") or "").replace('"', "'").strip()
+        if t and t.lower() not in {x.lower() for x in terms}:
+            terms.append(t)
+    return terms
+
+
+def _definitions_terms(rows: list) -> str:
+    terms = _definitions_term_list(rows)
+    shown = _and_join([f'"{t}"' for t in terms[:_MAX_DEFINITION_TERMS]])
+    if len(terms) > _MAX_DEFINITION_TERMS:
+        shown += f" and {len(terms) - _MAX_DEFINITION_TERMS} more"
+    return shown
+
+
+def _definitions_found(rows: list) -> str:
+    """P3.34 follow-up: how many instruments the search found defining each
+    term, from the record's `count` (the tool's instruments: not the
+    placeholder records, the longer terms or the rows the filters removed).
+    In the stored quick-lookup runs (`wave5_p334q_B`) the count reached the
+    Manager in the scope block 6 of 6 and the answer gave 2 to 4 of 30 as
+    "several" 6 of 6, so code says it. One term: "30 instruments defining it".
+    Several: each term with its count, up to `_MAX_DEFINITION_TERMS` ("none"
+    where its search found none; a term whose search did not complete has no
+    count). A term searched more than once (one search per Deep Research
+    step) takes its largest."""
+    best: dict = {}
+    for e in rows:
+        if e.get("ok"):
+            key = str(e.get("term") or "").replace('"', "'").strip().lower()
+            best[key] = max(best.get(key, 0), int(e.get("count") or 0))
+
+    def _noun(n: int) -> str:
+        return "no instrument" if not n else f"{n} instrument{'s' if n != 1 else ''}"
+
+    terms = _definitions_term_list(rows)
+    counted = [t for t in terms if t.lower() in best][:_MAX_DEFINITION_TERMS]
+    if len(terms) <= 1 or not counted:
+        return f"{_noun(max(best.values()))} defining it"
+    parts = []
+    for t in counted:
+        n = best[t.lower()]
+        parts.append(f'{_noun(n) if not parts else (n or "none")} defining "{t}"')
+    return _and_join(parts)
+
+
+def _definitions_sentence(rows: list) -> str:
+    """What the definitions search established, for the legal professional:
+    the second half of the footer's definitions sentence."""
+    ok = [e for e in rows if e.get("ok")]
+    if not ok:
+        return "; that search did not complete, so nothing above rests on it."
+    if not any(e.get("count") for e in ok):
+        return ("; none of the provisions that best matched the search defines it in "
+                "quotation marks, which is not the same as the term being undefined in law.")
+    return (f"; it found {_definitions_found(rows)} in quotation marks among the provisions "
+            "that best matched the search, so a definition worded differently, or not among "
+            "them, may not appear above.")
+
+
+def _definitions_footer_clause(entries: Optional[list]) -> str:
+    """P3.34's clause on the footer of a turn that also searched the index
+    some other way. "" when the tool did not run."""
+    rows = _definitions_rows(entries)
+    if not rows:
+        return ""
+    return (f" All legislation in the index was also searched once for provisions defining "
+            f"{_definitions_terms(rows)}{_definitions_sentence(rows)}")
+
+
+def _definitions_only_head(entries: Optional[list]) -> str:
+    """The footer's opening where the definitions search is the only search
+    of the index this turn ran (`section_scope_footer`'s first branch)."""
+    rows = _definitions_rows(entries)
+    return (f"for this reply all legislation in the index was searched once for provisions "
+            f"defining {_definitions_terms(rows)}{_definitions_sentence(rows)}")
 
 
 # ---------------------------------------------------------------------------
@@ -1082,6 +1296,20 @@ def list_coverage(entries: Optional[list]) -> Optional[dict]:
                 if best is None or (m, len(ids)) > (best["M"], best["N"]):
                     best = {"N": len(ids), "M": m, "query": shown,
                             "unsearched": [i for i in ids if i not in checked]}
+        # P3.57: a text scan by code over the list read each instrument it
+        # could in full, so it is a candidate too; on a tie it wins, since it
+        # says more than a section search can (a search ranks by meaning).
+        for e in entries or []:
+            if e.get("tool") != SCAN_ENTRY or not isinstance(e.get("ids"), list):
+                continue
+            checked = {_list_id(x) for x in (e.get("found") or []) + (e.get("absent") or [])}
+            for ids in lists:
+                if set(ids) != {_list_id(x) for x in e["ids"]}:
+                    continue
+                m = len(set(ids) & checked)
+                if best is None or (m, len(ids), 1) > (best["M"], best["N"], int(bool(best.get("scan")))):
+                    best = {"N": len(ids), "M": m, "query": str(e.get("literal") or ""),
+                            "unsearched": [i for i in ids if i not in checked], "scan": True}
         if best:
             q = best["query"].strip("\"'‘’“” ")
             best["query"] = q.replace('"', "'").replace("[", "(").replace("]", ")")[:80]
@@ -1093,6 +1321,8 @@ def list_coverage(entries: Optional[list]) -> Optional[dict]:
 def _list_coverage_text(cov: dict, who: str) -> str:
     """The sentences shared by the Worker's scope block and the synthesis note."""
     n, m, q = cov["N"], cov["M"], cov["query"]
+    if cov.get("scan"):
+        return _scan_coverage_text(cov)
     if m < n:
         rest = n - m
         were, those, contain = ("was", "that one", "contains") if rest == 1 else (
@@ -1109,6 +1339,28 @@ def _list_coverage_text(cov: dict, who: str) -> str:
         f'for "{q}". If the answer names those in which it was found, it MUST also say that '
         f'the other listed instruments were searched and "{q}" was not found in the text '
         "returned."
+    )
+
+
+def _scan_coverage_text(cov: dict) -> str:
+    """P3.57: the list-coverage sentences where code read the list's texts."""
+    n, m, q = cov["N"], cov["M"], cov["query"]
+    if m >= n:
+        return (
+            f"the made-under record listed {n} instruments, and code read every one of them "
+            f'in full and searched it for "{q}" (the text scan). If the answer names those in '
+            f'which it was found, it MUST also say that the other listed instruments were read '
+            f'in full and "{q}" does not appear in their provisions and schedules as made.'
+        )
+    rest = n - m
+    were, those, contain = ("was", "that one", "contains") if rest == 1 else (
+        "were", f"those {rest}", "contain")
+    return (
+        f"the made-under record listed {n} instruments, and code read {m} of them in full "
+        f'and searched them for "{q}" (the text scan). The other {rest} could not be read '
+        f"({_and_more(cov['unsearched'], _LIST_COVERAGE_NAMED)}). If the answer says which "
+        f'of the listed instruments contain "{q}", it MUST say that {rest} of the {n} {were} '
+        f"not checked, and say nothing of what {those} {contain}."
     )
 
 
@@ -1137,7 +1389,7 @@ def _list_coverage_footer(entries: Optional[list]) -> str:
     """P3.53's sentence for the legal professional, where some of the list was
     not searched. "" otherwise."""
     cov = list_coverage(entries)
-    if not cov or cov["M"] >= cov["N"]:
+    if not cov or cov["M"] >= cov["N"] or cov.get("scan"):
         return ""
     rest = cov["N"] - cov["M"]
     return (f" Of the {cov['N']} instruments the made-under record lists, {cov['M']} were "
@@ -1595,6 +1847,125 @@ def _relations_limb(log: Optional[list]) -> str:
     return "".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# P4.20: one list of change records on the lawyer's footer
+# ---------------------------------------------------------------------------
+#
+# P3.5's clause named the first three change records consulted, in the order
+# consulted; P2.5's named, sorted, the first three that hold a commencement or
+# repeal; P2.5's dated branch named a third list and P3.49's a fourth (those
+# made before 1963). On one line they could name different instruments, and the
+# lawyer could not tell which was checked: 109 of 423 stored footers carrying
+# both named different instruments, 36 more differed only in order (Thomas, 23
+# and 30 September). The footer now names ONE list, in the order consulted, up
+# to `_MAX_RECORDS_NAMED` then a count, and every other clause points into it.
+# A property some but not all of the records hold is marked against each one
+# that holds it; one all of them hold is said of "those recorded changes", so
+# the common one-record footer carries no mark.
+_MAX_RECORDS_NAMED = 8
+_MARK_SOURCED = "lists a commencement or removal"
+_MARK_DATED = "dates added for commencements"
+_MARK_OLD = f"made before {CHANGE_RECORD_FIRST_YEAR}"
+# How a clause pointing into the list, and a remainder past the cap, say each
+# mark ("those marked above as ...", "2 of them ...").
+_MARK_AS = {
+    _MARK_SOURCED: "listing a commencement or removal",
+    _MARK_DATED: "having dates added for commencements",
+    _MARK_OLD: f"made before {CHANGE_RECORD_FIRST_YEAR}",
+}
+
+
+def _sourced(e: dict) -> bool:
+    """A currency `relations` entry whose record lists a commencement or a
+    removal (P2.5; P3.28 counts a words-only or a qualified removal too)."""
+    return bool(e.get("commenced") or e.get("repeals")
+                or e.get("words_only_removals") or e.get("qualified_removals"))
+
+
+def _record_list(entries: Optional[list]) -> dict:
+    """The change records this turn consulted, as the footer names them.
+
+    `order` is P3.5's: every `change_record` entry's id in the order consulted,
+    then any id only a currency `relations` entry carries (none in the stored
+    record; kept so that no id the currency clause speaks of falls outside the
+    list). `named` is True where `_relations_footer_clause` names the list, so
+    that `_currency_footer_clause` points into it rather than naming its own.
+    """
+    rows = [e for e in (entries or []) if e.get("tool") == "change_record"]
+    cur = [e for e in (entries or [])
+           if e.get("tool") == "currency" and e.get("kind") == "relations"]
+    order, old = [], []
+    for e in rows:
+        lid = e.get("legislation_id") or ""
+        if lid and lid not in order:
+            order.append(lid)
+        if (lid and not e.get("relations") and before_change_record(lid)
+                and lid not in old):
+            old.append(lid)
+    if rows:
+        for e in cur:
+            lid = e.get("legislation_id") or ""
+            if lid and lid not in order:
+                order.append(lid)
+    sourced, dated = [], []
+    for e in cur:
+        lid = e.get("legislation_id") or ""
+        if lid and _sourced(e) and lid not in sourced:
+            sourced.append(lid)
+        if lid and e.get("dated") and lid not in dated:
+            dated.append(lid)
+    # P3.49: a list of pre-1963 records alone is said by the pre-1963 clause,
+    # which then stands without the lead (and so without the list).
+    named = bool(order) and not all(lid in old for lid in order)
+    return {"order": order, "old": old, "sourced": sourced, "dated": dated,
+            "named": named}
+
+
+def _some_not_all(ids: list, order: list) -> bool:
+    held = [lid for lid in order if lid in ids]
+    return bool(held) and len(held) < len(order)
+
+
+def _named_records(order: list, marks: dict) -> str:
+    """`order` up to the cap, each id followed by its marks, then a count.
+
+    `marks` maps a mark to the ids it is set on. A remainder past the cap says
+    how many of it carry each mark, so a clause pointing at a mark stays true
+    of the records left unnamed.
+    """
+    shown = []
+    for lid in order[:_MAX_RECORDS_NAMED]:
+        got = [m for m, ids in marks.items() if lid in ids]
+        shown.append(lid + (f" ({'; '.join(got)})" if got else ""))
+    text = ", ".join(shown)
+    rest = order[_MAX_RECORDS_NAMED:]
+    if rest:
+        text += f" and {len(rest)} more"
+        counts = []
+        for m, ids in marks.items():
+            n = sum(1 for lid in rest if lid in ids)
+            if n:
+                counts.append(f"{n} of them {_MARK_AS[m]}")
+        if counts:
+            text += f" ({'; '.join(counts)})"
+    return text
+
+
+def _list_marks(info: dict) -> dict:
+    """The marks the one list carries: a property some but not all of its
+    records hold. The pre-1963 mark only where the list is named beside the
+    pre-1963 clause (the mixed case)."""
+    order = info["order"]
+    marks = {}
+    if _some_not_all(info["sourced"], order):
+        marks[_MARK_SOURCED] = set(info["sourced"])
+    if info["sourced"] and _some_not_all(info["dated"], order):
+        marks[_MARK_DATED] = set(info["dated"])
+    if info["named"] and info["old"]:
+        marks[_MARK_OLD] = set(info["old"])
+    return marks
+
+
 def _relations_footer_clause(entries: Optional[list]) -> str:
     """The lawyer-facing half of P3.5, as one clause on the existing footer.
 
@@ -1616,36 +1987,44 @@ def _relations_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "change_record"]
     if not rows:
         return ""
-    consulted, old = [], []
-    for e in rows:
-        lid = e.get("legislation_id") or ""
-        if lid and lid not in consulted:
-            consulted.append(lid)
-        # P3.49: written by code, so the lawyer is told whatever the answer says.
-        if (lid and not e.get("relations") and before_change_record(lid)
-                and lid not in old):
-            old.append(lid)
+    info = _record_list(entries)
+    old = info["old"]
     old_clause = ""
     if old:
         one = len(old) == 1
-        # Every one up to the limb's 8, then a count: at 3, the acceptance's
-        # rep 2 named three of six and left out the Shops Act 1950 itself.
-        named = ", ".join(old[:8]) + (f" and {len(old) - 8} more" if len(old) > 8 else "")
+        if not info["named"]:
+            # P3.49: written by code, so the lawyer is told whatever the answer
+            # says. Every one up to the limb's 8, then a count: at 3, the
+            # acceptance's rep 2 named three of six and left out the Shops Act
+            # 1950 itself. Here this is the footer's one list (P4.20).
+            named = ", ".join(old[:8]) + (
+                f" and {len(old) - 8} more" if len(old) > 8 else "")
+            return (
+                " The index used holds no record of changes to legislation made "
+                f"before {CHANGE_RECORD_FIRST_YEAR} ({named}), so whether "
+                f"{'it has' if one else 'they have'} been amended or repealed since "
+                "is not known from this research; check the revised text on "
+                f"legislation.gov.uk before relying on {'it' if one else 'them'}."
+            )
+        # P4.20: beside the consulted list, the pre-1963 records are marked
+        # within it, not named again in a second list.
         old_clause = (
             " The index used holds no record of changes to legislation made before "
-            f"{CHANGE_RECORD_FIRST_YEAR} ({named}), so whether "
-            f"{'it has' if one else 'they have'} been amended or repealed since is "
-            "not known from this research; check the revised text on "
-            f"legislation.gov.uk before relying on {'it' if one else 'them'}."
+            f"{CHANGE_RECORD_FIRST_YEAR}, so whether "
+            + (f"the one marked above as {_MARK_AS[_MARK_OLD]} has" if one
+               else f"those marked above as {_MARK_AS[_MARK_OLD]} have")
+            + " been amended or repealed since is not known from this research; "
+            "check the revised text on legislation.gov.uk before relying on "
+            f"{'it' if one else 'them'}."
         )
-        if all(lid in old for lid in consulted):
-            return old_clause
     any_found = any(e.get("by_other") for e in rows)
     truncated = any(not e.get("complete") for e in rows)
+    # P4.20: the footer's one list of change records (`_record_list`), up to
+    # 8 then a count (P3.5 named the first 3 and said nothing of the rest).
     lead = (
         " Commencement and amendment relations above come from legislation.gov.uk's "
-        f"recorded changes for {', '.join(consulted[:3])}, which this research "
-        "consulted directly"
+        f"recorded changes for {_named_records(info['order'], _list_marks(info))}, "
+        "which this research consulted directly"
     )
     if any_found and any(e.get("dated") for e in rows):
         # P3.21: a date the hop retrieved is not "read from the instrument
@@ -1772,8 +2151,14 @@ def _title_markers(results: Any) -> list:
         m = _TITLE_STATUS_MARKER.search(str(r.get("title") or ""))
         if not m:
             continue
+        lid = str(r.get("legislation_id") or "")
+        # P4.28: a placeholder id names nothing; the row's title, which carries
+        # the marker, is what identifies it. Not yet seen: none of the 324
+        # stored placeholder rows carried a marker.
+        if is_placeholder_id(lid):
+            lid = f'"{str(r.get("title") or "").strip()[:58]}"'
         out.append((
-            str(r.get("legislation_id") or "")[:60],
+            lid[:60],
             m.group(1).lower(),
             m.group(2).strip()[:40],
         ))
@@ -2346,7 +2731,7 @@ def _currency_limb(log: Optional[list]) -> str:
     touched = [
         e for e in log
         if e.get("tool") in ("search_legislation", "search_legislation_sections",
-                             "change_record")
+                             "change_record", DEFINITIONS_ENTRY)
     ]
     rows = [e for e in log if e.get("tool") == "currency"]
     if not touched and not rows:
@@ -2482,21 +2867,30 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     rows = [e for e in (entries or []) if e.get("tool") == "currency"]
     if not rows:
         return ""
-    sourced, consulted, dated = [], False, []
-    for e in rows:
-        if e.get("kind") == "relations":
-            consulted = True
-            lid = e.get("legislation_id") or ""
-            # P3.28: a record whose only removals are words-only or qualified
-            # ones still lists a removal, so P4.18's "list neither a
-            # commencement nor a repeal" would be false of it: it is sourced.
-            # One whose only "repeal" was a power conferred no longer is.
-            if lid and (e.get("commenced") or e.get("repeals")
-                        or e.get("words_only_removals")
-                        or e.get("qualified_removals")) and lid not in sourced:
-                sourced.append(lid)
-            if lid and e.get("dated") and lid not in dated:
-                dated.append(lid)
+    consulted = any(e.get("kind") == "relations" for e in rows)
+    # P3.28: a record whose only removals are words-only or qualified ones
+    # still lists a removal, so P4.18's "list neither a commencement nor a
+    # repeal" would be false of it: it is sourced (`_sourced`). One whose only
+    # "repeal" was a power conferred no longer is.
+    info = _record_list(entries)
+    sourced, dated = info["sourced"], info["dated"]
+    # P4.20: where P3.5's clause names the footer's list, this clause points
+    # into it ("those recorded changes", or the ones marked there) and names
+    # no second list. Where it names none (no change-record entry, which no
+    # stored turn has), this clause names its own, marked the same way.
+    if info["named"]:
+        base, where = info["order"], "marked above"
+        checked = ("those recorded changes" if not _some_not_all(sourced, base)
+                   else "the recorded changes marked above as "
+                        f"{_MARK_AS[_MARK_SOURCED]}")
+    else:
+        base, where = sourced, "marked"
+        checked = "the recorded changes for " + _named_records(
+            sourced, {_MARK_DATED: set(dated)} if _some_not_all(dated, sourced) else {})
+    dated_ref = ("their commencements made by another instrument"
+                 if not _some_not_all(dated, base)
+                 else "the commencements made by another instrument in those "
+                      f"{where} as {_MARK_AS[_MARK_DATED]}")
     if sourced and dated:
         # P3.21: code retrieved commencement dates, so "nothing above has been
         # checked against a commencement date" is false here. Says what the date
@@ -2504,10 +2898,9 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
         # one "is in force" (an indirect question) and its disclaimer literal.
         return (
             " Whether legislation is in force is not something this index reports; "
-            f"what was checked is the recorded changes for {', '.join(sorted(sourced)[:3])}, "
+            f"what was checked is {checked}, "
             "which name the instruments involved provision by provision, and, for "
-            f"the commencements of {', '.join(sorted(dated)[:3])} made by another "
-            f"instrument, the date {_DATE_RECORD} gives for each. Neither is a check "
+            f"{dated_ref}, the date {_DATE_RECORD} gives for each. Neither is a check "
             "of whether a provision has since been amended or repealed."
         )
     lead = (
@@ -2516,8 +2909,7 @@ def _currency_footer_clause(entries: Optional[list]) -> str:
     )
     if sourced:
         lead += (
-            "; what was checked is the recorded changes for "
-            f"{', '.join(sorted(sourced)[:3])}, which name the instruments "
+            f"; what was checked is {checked}, which name the instruments "
             "involved provision by provision but carry no dates."
         )
     elif consulted:
@@ -2709,12 +3101,20 @@ _OUTLINE_BLOCK = re.compile(
 _FETCHED_BLOCK = re.compile(
     r"\[PROVISION FETCHED BY CODE[^\]]*\][\s\S]*?\[/PROVISION FETCHED BY CODE\]", re.I
 )
+# P3.50 (A1): the court's own limit on its decision, for the Worker
+# (`court_limits.court_limit_note`) and the synthesis (`court_limits_block`).
+# Its body is the judgment's words, so a report that quotes it is doing its
+# job; an echo of the block, markers and all, goes, as `_FETCHED_BLOCK` does.
+_LIMIT_BLOCK = re.compile(
+    r"\[COURT['’]S OWN LIMITS?[^\]]*\][\s\S]*?\[/COURT['’]S OWN LIMITS?\]", re.I
+)
 # P3.27 adds `SCHEDULES AND ANNEXES` (`schedule_units.schedules_note`). Not
 # the bare word "SCHEDULES": the pattern is case-insensitive, and a lawyer's
 # answer can open a citation link with it ("[Schedules 1 and 2](...)").
 _TOOL_BLOCK = re.compile(
     r"\[/?(?:SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
-    r"|SECTION OUTLINE|SCHEDULES AND ANNEXES —|PROVISION FETCHED BY CODE)"
+    r"|SECTION OUTLINE|SCHEDULES AND ANNEXES —|PROVISION FETCHED BY CODE"
+    r"|COURT['’]S OWN LIMITS?)"
     r"[^\[\]]*\]",
     re.I,
 )
@@ -2731,7 +3131,7 @@ _TOOL_BLOCK = re.compile(
 # dash.
 _BARE_TAG = re.compile(
     r"(`?)\[(SEARCH SCOPE|ENABLING POWER|CHANGE RECORD|CURRENCY|PINPOINTS TO KEEP"
-    r"|SECTION OUTLINE|PROVISION FETCHED BY CODE)\]\1( ?)",
+    r"|SECTION OUTLINE|PROVISION FETCHED BY CODE|COURT['’]S OWN LIMITS?)\]\1( ?)",
     re.I,
 )
 
@@ -2800,7 +3200,8 @@ def record_budget_stop(log: Optional[list], name: str, args: dict, budget: Optio
         log.append({
             "tool": _BUDGET_TOOL,
             "blocked_tool": name,
-            "query": str((args or {}).get("query") or "")[:200],
+            # P3.34: a refused `find_definitions` carries a term, not a query.
+            "query": str((args or {}).get("query") or (args or {}).get("term") or "")[:200],
             "limit": budget.get("limit"),
             "run": budget.get("id"),
         })
@@ -2969,6 +3370,10 @@ def _section_budget_held(rows: list) -> dict:
     out = {}
     for e in rows:
         lid = _sb_lid(e)
+        # P4.28: these sentences name the instrument, so a placeholder id
+        # takes the plain limb, which counts it.
+        if is_placeholder_id(lid):
+            continue
         if lid and lid not in out and isinstance(e.get("provisions"), int):
             out[lid] = {"provisions": e["provisions"], "units": list(e.get("units") or [])}
     return out
@@ -3015,6 +3420,10 @@ def _plain_section_budget_limb(rows: list) -> str:
                 ids.append(lid)
         n = len(rows)
         which = ", ".join(ids[:4]) or "an instrument"
+        # P4.28: a placeholder id is counted, never named.
+        refs, held = split_placeholders(ids)
+        if held:
+            which = ", ".join(refs[:4] + [unidentified_phrase(len(held))])
         return (
             f"Searching within {which} was cut short: this step used its limit of "
             + (f"{limit} rounds of " if limit else "")
@@ -3130,9 +3539,14 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
             lid = (e.get("legislation_id") or "").strip()
             if lid and lid not in ids:
                 ids.append(lid)
+        # P4.28: a placeholder id is counted, never named.
+        refs, held = split_placeholders(ids)
+        named = ", ".join(refs[:8])
+        if held:
+            named = ", ".join(refs[:8] + [unidentified_phrase(len(held), noun=False)])
         lines.append(
             f"Searched within {len(ids) or len(sections)} instrument(s) for "
-            f"specific provisions: {', '.join(ids[:8]) or 'n/a'}"
+            f"specific provisions: {named or 'n/a'}"
             + (" (ranked extracts, not the full contents of any of them)")
         )
     # P2.7. Next to the searches it qualifies: the list above is not everything
@@ -3155,6 +3569,14 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _made_under = _made_under_limb(log)
     if _made_under:
         lines.append(_made_under)
+    # P3.34: the definitions search, next to the made-under list it resembles.
+    _definitions = _definitions_limb(log)
+    if _definitions:
+        lines.append(_definitions)
+    # P3.57: what code's text scan of the list read and found.
+    _scan = scan_limb(log)
+    if _scan:
+        lines.append(_scan)
     # P3.53: straight after the list it qualifies.
     _list_cov = _list_coverage_limb(log, cfg)
     if _list_cov:
@@ -3188,7 +3610,7 @@ def worker_scope_block(log: Optional[list], cfg: Optional[dict] = None) -> str:
     _published = published_limb(log)
     if _published:
         lines.append(_published)
-    if _lookup and not searches and not sections:
+    if _lookup and not searches and not sections and not _definitions:
         # P3.7: a step that only looked instruments up has no search terms, so
         # the rule below would demand quoting terms that are not there (P2.9's
         # defect in a new place). Every other shape keeps it byte for byte.
@@ -4168,6 +4590,7 @@ def answer_scope_footer(searches: Optional[list], cfg: Optional[dict] = None) ->
         f"{_section_budget_footer_clause(all_entries)}"
         f"{_enabling_footer_clause(all_entries)}"
         f"{_made_under_footer_clause(all_entries)}"
+        f"{_definitions_footer_clause(all_entries)}"
         f"{_relations_footer_clause(all_entries)}"
         f"{_currency_footer_clause(all_entries)}"
         f"{_lookup_footer_clause(all_entries)}"
@@ -4268,7 +4691,11 @@ def carried_scope_footer(
     """
     try:
         entries = list(searches or [])
-        if any(e.get("tool") in _SEARCH_TOOLS for e in entries):
+        # P3.34: a definitions search is a search of the index this reply
+        # ran, so "no search ... was run for this reply" would be false;
+        # `section_scope_footer` states it instead.
+        if any(e.get("tool") in _SEARCH_TOOLS or e.get("tool") == DEFINITIONS_ENTRY
+               for e in entries):
             return ""
         earlier = _earlier_footers(messages)
         if not earlier:
@@ -4383,7 +4810,20 @@ def section_scope_footer(searches: Optional[list]) -> str:
         rows = [e for e in entries
                 if isinstance(e, dict) and e.get("tool") == _SECTION_TOOL]
         if not rows:
-            return ""
+            # P3.34: a turn whose only search of the index was the
+            # definitions search. Same clause set as below.
+            if not _definitions_rows(entries):
+                return ""
+            return (
+                f"\n\n*Search scope: {_definitions_only_head(entries)}"
+                f"{_budget_footer_clause(entries)}"
+                f"{_enabling_footer_clause(entries)}"
+                f"{_made_under_footer_clause(entries)}"
+                f"{_relations_footer_clause(entries)}"
+                f"{_currency_footer_clause(entries)}"
+                f"{_lookup_footer_clause(entries)}"
+                f"{case_law_scope_clause(entries)}*"
+            )
         ids = []
         for e in rows:
             lid = str(e.get("legislation_id") or "").strip()
@@ -4392,6 +4832,14 @@ def section_scope_footer(searches: Optional[list]) -> str:
         where = _and_join(ids[:_MAX_NAMED_INSTRUMENTS])
         if len(ids) > _MAX_NAMED_INSTRUMENTS:
             where += f" and {len(ids) - _MAX_NAMED_INSTRUMENTS} more"
+        # P4.28: a placeholder id is counted, never named to the legal
+        # professional.
+        refs, held = split_placeholders(ids)
+        if held:
+            parts = refs[:_MAX_NAMED_INSTRUMENTS]
+            if len(refs) > _MAX_NAMED_INSTRUMENTS:
+                parts.append(f"{len(refs) - _MAX_NAMED_INSTRUMENTS} more")
+            where = _and_join(parts + [unidentified_phrase(len(held))])
         terms, listed = _listed_terms(e.get("query") for e in rows)
         head = (f"for this reply the text of {where or 'an instrument'} in the "
                 "legislation index was searched" + (f" for {listed}" if terms else ""))
@@ -4401,6 +4849,7 @@ def section_scope_footer(searches: Optional[list]) -> str:
             f"{_section_budget_footer_clause(entries)}"
             f"{_enabling_footer_clause(entries)}"
             f"{_made_under_footer_clause(entries)}"
+            f"{_definitions_footer_clause(entries)}"
             f"{_relations_footer_clause(entries)}"
             f"{_currency_footer_clause(entries)}"
             f"{_lookup_footer_clause(entries)}"
@@ -4432,6 +4881,8 @@ def strip_scope_blocks(text: str) -> tuple:
     out, n1 = _PINPOINT_BLOCK.subn("", out)
     out, n3 = _OUTLINE_BLOCK.subn("", out)
     out, n4 = _FETCHED_BLOCK.subn("", out)
+    out, n6 = _LIMIT_BLOCK.subn("", out)
+    n4 += n6
     # P4.22: a bare tag a sentence names, before `_TOOL_BLOCK` would delete it.
     out, n5 = _BARE_TAG.subn(_bare_tag, out)
     out, n2 = _TOOL_BLOCK.subn("", out)

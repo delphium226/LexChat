@@ -457,6 +457,40 @@ async def titles_for(legislation_ids) -> dict:
         return {}
 
 
+async def amended_act_id(ref_kind: str, ref: str, provision: str) -> Optional[str]:
+    """P3.51 (A2): the one Act the record holds instruments under `provision`
+    of (e.g. "section/33A") that an amending provision's reference names:
+    `ref_kind` "year" ("the 1987 Act", `ref` "1987") or "title" (`ref` the
+    Act's title). None where the record holds no such Act, or more than one;
+    like `section_family_rows`, no database until the record is loaded; never
+    raises."""
+    if not _STATE["available"]:
+        return None
+    prov = str(provision or "")
+    if not re.fullmatch(r"section/\d{1,4}[A-Z]{0,3}", prov):
+        return None
+    try:
+        from ..database import async_session_maker
+        async with async_session_maker() as session:
+            if ref_kind == "year" and re.fullmatch(r"\d{4}", str(ref or "")):
+                rows = (await session.execute(text(
+                    "SELECT DISTINCT act_id FROM made_under_powers "
+                    "WHERE provision = :prov AND act_id ~ :rx"),
+                    {"prov": prov, "rx": rf"^[a-z]+/{ref}/\d+$"})).all()
+            elif ref_kind == "title" and ref:
+                rows = (await session.execute(text(
+                    "SELECT DISTINCT act_id FROM made_under_powers "
+                    "WHERE provision = :prov AND lower(act_title) = lower(:t)"),
+                    {"prov": prov, "t": re.sub(r"\s+", " ", str(ref)).strip()})).all()
+            else:
+                return None
+        ids = sorted({r[0] for r in rows if r[0]})
+        return ids[0] if len(ids) == 1 else None
+    except Exception as e:
+        logger.warning("[MadeUnder] Amended Act lookup failed: %s", e)
+        return None
+
+
 async def section_family_rows(act_id: str, bases) -> tuple:
     """P3.51: `(rows, coverage)` for `utils.made_under.section_families_block`:
     every instrument the record holds as made under a section of `act_id` whose

@@ -271,7 +271,13 @@ export function useChat({
         ...run.extras,
         ...(deepResearchPlan ? { research_plan: deepResearchPlan } : {}),
       };
-      if (isVisible(run)) setMessages(prev => replaceDraft(prev, withTiming));
+      if (isVisible(run)) {
+        setMessages(prev => replaceDraft(prev, withTiming));
+        // P4.25: the rail moves to the new answer, with or without sources.
+        // Left pinned to the previous answer (pinned when that one completed),
+        // an answer with no source of its own showed the previous one's.
+        setActiveSourcesMsgId(null);
+      }
 
       if (run.chatId) {
         const saved = await saveMessage(
