@@ -47,6 +47,7 @@ from .tools.executor import fetch_provision_list, fetch_text_with_schedules
 from ..utils.instrument_lookup import LOOKUP_TOOL
 from ..utils.made_under import MADE_UNDER_TOOL, made_under_note
 from ..utils.definitions import DEFINITIONS_TOOL, definitions_note
+from ..utils.placeholder_ids import is_placeholder_id
 from ..utils.literal_scan import search_scan_note
 from ..utils.search_scope import record_made_under, record_definitions
 from ..utils.discovery_budget import (
@@ -175,7 +176,8 @@ def _extract_listed_instruments(name: str, args: dict, raw_result_str: str,
         have = {s.get("_lid") for s in listed}
 
         def _add(lid: str, title: str, url: str, sub: str = "") -> None:
-            if not lid or lid in have:
+            # P4.28: never a placeholder id (`_extract_sources_inner`).
+            if not lid or lid in have or is_placeholder_id(lid):
                 return
             have.add(lid)
             title = title.strip()
@@ -274,10 +276,14 @@ def _legislation_kind(legislation_id: str) -> str:
 
 
 def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list) -> None:
+    # P4.28: a placeholder `legislation_id` ("[UNCLEAR: ...]") never becomes a
+    # rail source, from any branch below: its uri is built on the same text and
+    # links nowhere, and a "possible reference" in it is an OCR guess. The
+    # Worker still reads the record; only the rail and the links refuse it.
     if name == "search_legislation":
         for item in data.get("results", []):
             lid = item.get("legislation_id") or ""
-            if not lid:
+            if not lid or is_placeholder_id(lid):
                 continue
             if any(s.get("_lid") == lid for s in accumulator):
                 continue
@@ -295,7 +301,7 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                 "cite": lid,
             })
 
-    elif name == "search_legislation_sections":
+    elif name == "search_legislation_sections" and not is_placeholder_id(args.get("legislation_id")):
         lid = args.get("legislation_id") or ""
         sections = data.get("sections") or data.get("results") or []
         for sec in sections[:1]:  # enrich with first matching section only
@@ -322,7 +328,7 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
                     "url": data.get("url") or "",
                 })
 
-    elif name == "get_legislation_text":
+    elif name == "get_legislation_text" and not is_placeholder_id(args.get("legislation_id")):
         lid = args.get("legislation_id") or ""
         content = data.get("content") or data.get("text") or ""
         excerpt = content[:300] if content else ""
@@ -357,7 +363,8 @@ def _extract_sources_inner(name: str, args: dict, data: dict, accumulator: list)
             if not isinstance(group, dict) or group.get("self"):
                 continue
             rel_lid = group.get("legislation_id") or ""
-            if not rel_lid or any(s.get("_lid") == rel_lid for s in accumulator):
+            if (not rel_lid or is_placeholder_id(rel_lid)
+                    or any(s.get("_lid") == rel_lid for s in accumulator)):
                 continue
             effect = group.get("type_of_effect") or "change"
             subject = data.get("legislation_id") or args.get("legislation_id") or ""
@@ -1297,6 +1304,34 @@ def _case_law_note_with_scottish(args: dict, result) -> str:
         return ""
 
 
+# P4.28: what the nudge adds to a row whose `legislation_id` is a placeholder.
+# The row is still listed: LEX takes the placeholder as the record's key (both
+# stored section searches made with one returned 10 provisions, and 6387 t2's
+# answer came from one), so dropping it would close the only route to that
+# text. It is marked so the Worker does not cite the id as a reference.
+_PLACEHOLDER_NUDGE_MARK = (
+    " — no identifiable reference: you may search within it by this "
+    "legislation_id, but cite it by its title only, never by this id or its url"
+)
+
+
+def phase2_nudge(id_pairs: list) -> str:
+    """The NEXT STEP note after a `search_legislation` result: the first five
+    `(legislation_id, title)` pairs to search within. "" for none."""
+    if not id_pairs:
+        return ""
+    id_lines = "\n".join(
+        f'  - legislation_id: "{lid}"  ({title})'
+        + (_PLACEHOLDER_NUDGE_MARK if is_placeholder_id(lid) else "")
+        for lid, title in id_pairs[:5]
+    )
+    return (
+        f"\n\n[NEXT STEP: Call search_legislation_sections with the relevant "
+        f"legislation_id(s) below to retrieve the actual legal text before "
+        f"composing your answer:\n{id_lines}]"
+    )
+
+
 async def run_worker_tool(
     name: str,
     args: dict,
@@ -1857,16 +1892,7 @@ async def run_worker_tool(
             # carries, on 1.7% of rows, and the one a lawyer must not miss.
             scope_note += currency_note(args, raw_data)
             record_currency(search_log, name, args, raw_data)
-            if id_pairs:
-                id_lines = "\n".join(
-                    f'  - legislation_id: "{lid}"  ({title})'
-                    for lid, title in id_pairs[:5]
-                )
-                phase2_note = (
-                    f"\n\n[NEXT STEP: Call search_legislation_sections with the relevant "
-                    f"legislation_id(s) below to retrieve the actual legal text before "
-                    f"composing your answer:\n{id_lines}]"
-                )
+            phase2_note = phase2_nudge(id_pairs)
         except Exception:
             phase2_note = (
                 "\n\n[NEXT STEP: Call search_legislation_sections with the legislation_id "

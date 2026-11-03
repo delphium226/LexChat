@@ -1,0 +1,35 @@
+{
+ "SOURCES": [
+  {
+   "_lid": "ssi/2013/85",
+   "kind": "SI",
+   "title": "The Example (Scotland) Regulations 2013",
+   "url": "http://www.legislation.gov.uk/id/ssi/2013/85",
+   "meta": "revised",
+   "year": 2013,
+   "extent": [
+    "Scotland"
+   ],
+   "cite": "The Example (Scotland) Regulations 2013, s.2",
+   "sub": "Interpretation",
+   "excerpt": "In these Regulations..."
+  },
+  {
+   "_lid": "ukpga/1950/28",
+   "kind": "Act",
+   "title": "Shops Act 1950 (repealed)",
+   "url": "http://www.legislation.gov.uk/id/ukpga/1950/28",
+   "meta": "final",
+   "year": 1950,
+   "extent": [],
+   "cite": "ukpga/1950/28"
+  }
+ ],
+ "SEC_NOTE": "\n\n[SEARCH SCOPE — 1 provision(s) of ssi/2013/85, ranked by relevance to \"employer\". This is NOT the full contents of the instrument: a provision that does not appear here may still be in it. Do NOT state that a provision, power or duty is absent from ssi/2013/85 on the strength of this result, and do NOT speculate about why a provision was not returned. Ranked provisions do not include the preamble, so this result cannot tell you what this instrument was made under; do not state an enabling power from it. Commencement, amendment, repeal and revocation are a special case: do NOT conclude anything about them from these rows. Call `get_legislation_changes` with the legislation_id — it is the only tool that returns those relations, and it answers in one call what no number of searches can. If you report something as not found, say what was searched for and in which instrument.]",
+ "SEC_NOTE0": "\n\n[SEARCH SCOPE — 0 provisions of ssi/2013/85 matched \"employer\". That means the ranked search did not surface one — NOT that the instrument lacks such a provision, and NOT that the instrument is unavailable. Do not speculate about the cause; you do not know it. If you report this, say what was searched for and in which instrument, and say the search did not locate it rather than that it does not exist.]",
+ "CUR": "\n\n[CURRENCY — 1 of the rows above carry a repeal or revocation marker in the TITLE itself: ukpga/1950/28 — title says repealed. That marker is legislation.gov.uk's own and you MAY rely on it: treat those instruments as repealed or revoked and do NOT present them as current law. Where the marker carries no date, the date of repeal is not established by it. The absence of a marker on the other rows is NOT evidence that they are in force — nothing in a search result is.]",
+ "BLOCK": "\n\n[SEARCH SCOPE — what this research step actually did]\nSearched the legislation index 1 time(s) for: \"shops\"\nThose searches showed 2 row(s) drawn from 40 ranked candidates at most — the index ranks the whole corpus against the wording, so that is a ranking depth, not a count of relevant instruments.\nSearched within 4 instrument(s) for specific provisions: ssi/2013/85, ukpga/1950/28, asp/2002/13, uksi/2003/2682 (ranked extracts, not the full contents of any of them)\nSearching within asp/2002/13 was cut short: this step used its limit of 3 rounds of section searches on that instrument, and 1 further section search it asked for was not run. Provisions this step did not retrieve may still be in it. If the answer you write reports a provision of it as absent or not found, it MUST also say that searching within the instrument was stopped by a limit before it finished.\nFilters in force for the whole step: none.\nIn-force status: NOTHING in this step establishes that any instrument is in force as at today. The index records which text version it holds, not currency, and no tool returns an in-force flag. Commencement: this step consulted no change record, so do not state whether any provision of any instrument has been commenced. These carry a repeal or revocation marker in their own title and must NOT be presented as current law: ukpga/1950/28 (repealed). So in the Jurisdiction & Status section, state territorial extent from the metadata, and for currency state ONLY what is listed above — and state it, rather than calling a tool and reporting nothing from it. If nothing is listed, say that in-force status could not be verified from the available sources and say what would establish it. The prohibition is on the PROPOSITION and not on a form of words: \"currently in force\", \"in operation\", \"still good law\", \"current law\", \"active status\", \"continues to apply\" and \"all cited legislation is in force\" are the same unsupported claim in different words, and a judgment citing an Act is not evidence that the Act is in force today.\nNONE of this can establish that something does not exist. If any part of the answer you write reports something as not found, it MUST quote the search terms above (two or three are enough), state these filters or say plainly that none were applied, and attribute the miss to the search or the index — never to the user's citation. Do not say a search \"confirms\" an absence; it cannot. The index is incomplete and unevenly so (sampled Sep 2026: Acts of the Scottish Parliament complete, roughly 85% of 2025 SSIs held, under 10% of instruments made in 2026, and older gaps are per-instrument rather than by date). Absence from the index is therefore NOT evidence of absence in law.\n[/SEARCH SCOPE]",
+ "FOOTER": "\n\n*Search scope: the legislation index was searched for \"shops\"; no jurisdiction, type or date filter narrowed it. This is a ranked search of an index that is known to be incomplete — roughly 85% of 2025 Scottish SIs and under 10% of instruments made in 2026 are held (sampled Sep 2026) — so anything reported above as not found was not found in this index, which is not the same as being absent from the law. Searching within an instrument was also limited: one research step reached the cap on how many times a step may search inside one instrument, and 1 further search of it was not run, so the answer above may not cover every provision of that instrument. Whether legislation is in force is not something this index reports, so nothing above has been checked against a commencement date and no change record was consulted for this answer.*",
+ "SEC_FOOTER": "\n\n*Search scope: for this reply the text of ssi/2013/85, ukpga/1950/28 and asp/2002/13 and 1 more in the legislation index was searched for \"employer\". A search within an instrument returns the provisions that best match its terms, not the whole instrument, so a provision missing from its results may still be in the instrument and in this index. Searching within an instrument was also limited: one research step reached the cap on how many times a step may search inside one instrument, and 1 further search of it was not run, so the answer above may not cover every provision of that instrument. Whether legislation is in force is not something this index reports, so nothing above has been checked against a commencement date and no change record was consulted for this answer.*",
+ "_source": "Captured at 558184b (before P4.28) with inputs that carry no placeholder id; see test_placeholder_ids.py"
+}

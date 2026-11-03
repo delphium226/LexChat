@@ -281,12 +281,9 @@ def _resolvable(lid: str) -> bool:
 # legal professional can neither cite nor check it, and the bracket would
 # otherwise be read out as an id. An id that is unresolvable but is a
 # citation ("S.I. 1949 No. 404") is still listed, as `reference_unclear`.
-_PLACEHOLDER_ID = re.compile(r"[\[\]]|\bUNCLEAR\b", re.I)
-
-
-def is_placeholder_id(lid: Any) -> bool:
-    """True where a legislation_id is an OCR placeholder, not a reference."""
-    return bool(_PLACEHOLDER_ID.search(str(lid or "")))
+# P4.28 moved the test to `utils.placeholder_ids`, for every other place a
+# search row's id reaches; it is re-exported here under the same names.
+from .placeholder_ids import _PLACEHOLDER_ID, is_placeholder_id  # noqa: E402,F401
 
 
 def _stated_extent(row: dict) -> list:
