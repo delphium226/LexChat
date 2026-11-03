@@ -956,13 +956,13 @@ def _filter_constraint_block_for_mode(research_mode: str, cfg: dict) -> str:
 
 
 # FIX_PLAN P3.14: what the quick-lookup (conversational) Worker is told about
-# the lawyer's research filters. `get_worker_system_prompt` returns that
+# the legal professional's research filters. `get_worker_system_prompt` returns that
 # Worker's prompt from an early return, so the ACTIVE RESEARCH FILTERS block
 # above reaches the research Workers and never this one. The filters were
 # always ENFORCED (the executor reads them from the request config); what the
 # Worker lacked was knowing that a filter, not the index or the law, narrowed
 # its search: B5's shape. Measured in the stored runs, 6357 (Acts only) told
-# the lawyer an SSI was "unable to locate ... in the available legislation
+# the legal professional an SSI was "unable to locate ... in the available legislation
 # database" (wave1 rep1 t2) and "the legislation index does not hold" it
 # (wave2 rep1 t1).
 #
@@ -986,11 +986,9 @@ def _filter_constraint_block_for_mode(research_mode: str, cfg: dict) -> str:
 # legislation tools, the case-law date range only to one with the case-law
 # tools. With nothing to name the note is "" and the message is unchanged.
 #
-# The jurisdiction clause "where the brief names no jurisdiction, answer for
-# X" is added only for a territory other than Scotland: the prompt's own
-# default is Scotland (P3.4), so with any other filter set and a brief that
-# names none, the Worker would otherwise answer for Scotland while the
-# executor filtered to the other territory (the row's P3.4 note).
+# No "answer for X" clause (user decision, Session 52): the note states
+# what the filters do and nothing about which jurisdiction to answer for;
+# that stays with the prompt and the brief.
 #
 # Screened against the answer detectors (`test_quick_lookup_filters.py`),
 # since a Worker can echo it. Never raises (Invariant 5).
@@ -1012,12 +1010,9 @@ def _ql_jurisdiction_phrase(jurisdiction: str) -> str:
                 "United Kingdom, so legislation that applies across the UK without stating it "
                 "is left out")
     label = _JURISDICTION_LABELS.get(jurisdiction, jurisdiction)
-    phrase = (f"legislation search results whose stated extent leaves out {label} are removed "
-              f"(most results state no extent and are kept, so a result is not thereby shown "
-              f"to apply in {label})")
-    if jurisdiction != "scotland":
-        phrase += f"; where the brief names no jurisdiction, answer for {label}"
-    return phrase
+    return (f"legislation search results whose stated extent leaves out {label} are removed "
+            f"(most results state no extent and are kept, so a result is not thereby shown "
+            f"to apply in {label})")
 
 
 def quick_lookup_filter_note(research_mode: str, cfg: dict, today=None) -> str:
@@ -1065,7 +1060,7 @@ def quick_lookup_filter_note(research_mode: str, cfg: dict, today=None) -> str:
         if not facts:
             return ""
         return (
-            f"\n\n[{QUICK_LOOKUP_FILTERS_LABEL} — set by the lawyer and applied by the system "
+            f"\n\n[{QUICK_LOOKUP_FILTERS_LABEL} — set by the legal professional and applied by the system "
             "to every search you make: " + "; ".join(facts) + ". Something the brief asks "
             "about that your searches do not return may have been left out by these filters: "
             "if so, say that the filters left it out, never that it is unavailable or does not "

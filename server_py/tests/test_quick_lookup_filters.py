@@ -137,8 +137,8 @@ def test_the_whole_note_for_the_6357_filters():
     cfg = _cfg("conversational", "legislation_only", _jurisdiction="scotland",
                _legislation_type="primary", _year_to=2026)
     assert quick_lookup_filter_note("legislation_only", cfg, TODAY) == (
-        "\n\n[RESEARCH FILTERS — set by the lawyer and applied by the system to every search "
-        "you make: legislation searches return Acts only (primary legislation); legislation "
+        "\n\n[RESEARCH FILTERS — set by the legal professional and applied by the system to every "
+        "search you make: legislation searches return Acts only (primary legislation); legislation "
         "search results whose stated extent leaves out Scotland are removed (most results "
         "state no extent and are kept, so a result is not thereby shown to apply in "
         "Scotland). Something the brief asks about that your searches do not return may "
@@ -206,15 +206,14 @@ def test_each_worker_hears_only_of_the_filters_on_its_own_tools():
     ("wales", "Wales"),
     ("northern_ireland", "Northern Ireland"),
 ])
-def test_another_territory_overrides_the_scotland_default(jur, label):
-    """P3.4's note on the row: the prompt's default is Scotland, so a brief
-    naming no jurisdiction under another territory's filter needs the filter's
-    territory."""
+def test_another_territory_is_stated_without_an_answer_for_clause(jur, label):
+    """User decision (Session 52): the note states what the filter removes and
+    says nothing about which jurisdiction to answer for."""
     note = quick_lookup_filter_note("legislation_only",
                                     _cfg("conversational", "legislation_only",
                                          _jurisdiction=jur), TODAY)
     assert f"stated extent leaves out {label} are removed" in note
-    assert f"where the brief names no jurisdiction, answer for {label}." in note
+    assert "answer for" not in note
 
 
 def test_scotland_is_the_default_already_and_gets_no_override():
