@@ -10137,3 +10137,23 @@ merges one at a time with the full suite after each (4,686 → 4,840).
 - **Spend:** P3.28 seam $0.20 + `wave5_p357` $1.46 (6383) + `wave5_p328` $3.88 + `wave5_p357` $2.45 (6382) + `wave5_p357b` $1.38 + $0.35 = $9.72.
 - FIX_PLAN: 93 of 115, 2 in progress (P3.51, P3.52 parked), 9 of 14 buckets. Worktrees removed; `lev1`, `levB2` kept.
 
+## Session 52, continued (director model) — 2026-11-03 — P3.14, P4.9, P4.27, P4.28 done; P3.34 follow-ups; P4.29 booked ($3.29)
+
+- **P3.34 and P4.26 follow-ups** (worker `p334f`, merged `558184b`): placeholder rows left out of `find_definitions`
+  and counted; a P3.38-read instrument gets a rail entry where the answer names it (25 of 25 by dry run).
+- **P4.9 and P4.27** (worker `p409`, merged `fb6f7d8`): the in-thread mode-change marker (user decisions: as built,
+  not on the parliamentary bots) and the Jurisdiction filter's line. Checked in the browser on a local test chat
+  (deleted after). Done.
+- **P3.14** (worker `p314`, merged `c8aee0a`): user decisions 'set by the legal professional', no 'answer for X'
+  clause. Seam `--as-sent` ($0.67 + $0.36 re-draw): 6357 4 of 4 on the filters (without: 'This index does not hold'
+  1 of 2); 6354's link loss was one upstream-repeated draw (re-drawn 6,6,0,5 vs 9,6,0,5). Done.
+- **P4.28** (new row; worker `p4pid`, merged `9c8cd5a`): a placeholder id never a rail source (199 to 0) nor named
+  in a scope text; kept, marked, for the Worker, because LEX accepts it as a section-search key (6387's 1860 Act
+  s.XII, checked by hand). User decisions: keep marked, the wording, no rail entry. Done. **P4.29** booked.
+- **`find_definitions` in Conversational** (`wave5_p334q_A` $1.55, two heavy empties; `_B` $0.71): definers 2,2,2 to
+  3,3,3 of 5 and 1,1,1 to 3,3,2 of 28; 0 unverified; control clean; the count dropped by the Manager 6 of 6. User
+  decision: offer it and put the count in the footer by code (worker `p334c`, merged `28b7f4e`; 13 of 2,530
+  footers change).
+- **Thomas's items still open:** P3.52, P3.51 (parked), P3.3 (blocked). The tracker still shows P3.57 as Verified.
+- **Spend:** $1.03 (P3.14 seam) + $2.26 (`wave5_p334q`) = $3.29.
+- FIX_PLAN: 97 of 117, 2 in progress (P3.51, P3.52 parked), 9 of 14 buckets.

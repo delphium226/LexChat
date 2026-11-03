@@ -29,7 +29,11 @@ Research:
   limited before the notes are added.
 - **A question asking for every statutory definition of a term** gets one
   search of all legislation for provisions defining it, each listed with its
-  defining words (P3.34; Research and Deep Research).
+  defining words (P3.34; all three modes). Records the index holds without an
+  identifiable reference are counted, not listed.
+- **In Conversational mode the research step is told which research filters are
+  on**, so an instrument a filter left out is not reported as missing from the
+  index (P3.14).
 - **A judgment's own limit on its decision** is shown to the research step and
   the Deep Research write-up, and added to an answer that leaves it out, quoted
   (P3.50).
@@ -50,16 +54,29 @@ Answers:
 - **An amount a condensed summary states that its source does not contain** is
   removed before the research step reads it (P3.58).
 - **The internal "[Research Agent Result]" label** no longer reaches answers (P4.8).
+- **The line under an answer says how many instruments the definitions search
+  found**, so a reply giving a few of them is not read as the whole set (P3.34).
 
 Case law:
 - **The appeal detector no longer links unrelated cases** that share one common
   word of a party's name (P3.29).
 
+Screens:
+- **A change of research type or mode is marked in the conversation**, above the
+  first question asked under the new setting (P4.9).
+- **The Jurisdiction filter says what it keeps**: legislation that applies there,
+  UK-wide included, and legislation whose extent is not stated; case law is not
+  filtered (P4.27).
+
 Sources list:
 - **An answer with no sources of its own shows none**, with a button to show the
   earlier answer's, instead of showing the previous answer's sources (P4.25).
 - **Instruments taken from a direct lookup or a "made under" list** appear in the
-  sources list where the answer names them (P4.26).
+  sources list where the answer names them (P4.26), as do instruments whose text
+  was read from legislation.gov.uk.
+- **A record with no identifiable reference** (a scanned historical document
+  whose reference was not read) no longer appears in the sources list as a broken
+  link (P4.28).
 
 ## 2026.10.5 — 2026-10-30
 
