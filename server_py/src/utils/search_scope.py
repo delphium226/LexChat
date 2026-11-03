@@ -1141,16 +1141,53 @@ def _definitions_limb(log: Optional[list]) -> str:
     )
 
 
-def _definitions_terms(rows: list) -> str:
+def _definitions_term_list(rows: list) -> list:
+    """The searched terms, once each (case-insensitively), in search order."""
     terms = []
     for e in rows:
         t = str(e.get("term") or "").replace('"', "'").strip()
         if t and t.lower() not in {x.lower() for x in terms}:
             terms.append(t)
+    return terms
+
+
+def _definitions_terms(rows: list) -> str:
+    terms = _definitions_term_list(rows)
     shown = _and_join([f'"{t}"' for t in terms[:_MAX_DEFINITION_TERMS]])
     if len(terms) > _MAX_DEFINITION_TERMS:
         shown += f" and {len(terms) - _MAX_DEFINITION_TERMS} more"
     return shown
+
+
+def _definitions_found(rows: list) -> str:
+    """P3.34 follow-up: how many instruments the search found defining each
+    term, from the record's `count` (the tool's instruments: not the
+    placeholder records, the longer terms or the rows the filters removed).
+    In the stored quick-lookup runs (`wave5_p334q_B`) the count reached the
+    Manager in the scope block 6 of 6 and the answer gave 2 to 4 of 30 as
+    "several" 6 of 6, so code says it. One term: "30 instruments defining it".
+    Several: each term with its count, up to `_MAX_DEFINITION_TERMS` ("none"
+    where its search found none; a term whose search did not complete has no
+    count). A term searched more than once (one search per Deep Research
+    step) takes its largest."""
+    best: dict = {}
+    for e in rows:
+        if e.get("ok"):
+            key = str(e.get("term") or "").replace('"', "'").strip().lower()
+            best[key] = max(best.get(key, 0), int(e.get("count") or 0))
+
+    def _noun(n: int) -> str:
+        return "no instrument" if not n else f"{n} instrument{'s' if n != 1 else ''}"
+
+    terms = _definitions_term_list(rows)
+    counted = [t for t in terms if t.lower() in best][:_MAX_DEFINITION_TERMS]
+    if len(terms) <= 1 or not counted:
+        return f"{_noun(max(best.values()))} defining it"
+    parts = []
+    for t in counted:
+        n = best[t.lower()]
+        parts.append(f'{_noun(n) if not parts else (n or "none")} defining "{t}"')
+    return _and_join(parts)
 
 
 def _definitions_sentence(rows: list) -> str:
@@ -1162,9 +1199,9 @@ def _definitions_sentence(rows: list) -> str:
     if not any(e.get("count") for e in ok):
         return ("; none of the provisions that best matched the search defines it in "
                 "quotation marks, which is not the same as the term being undefined in law.")
-    return ("; the provisions defining it in quotation marks among those that best matched "
-            "the search were listed, so a definition worded differently, or not among them, "
-            "may not appear above.")
+    return (f"; it found {_definitions_found(rows)} in quotation marks among the provisions "
+            "that best matched the search, so a definition worded differently, or not among "
+            "them, may not appear above.")
 
 
 def _definitions_footer_clause(entries: Optional[list]) -> str:

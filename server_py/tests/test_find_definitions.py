@@ -553,6 +553,135 @@ def test_the_currency_limb_speaks_on_a_definitions_only_step():
     assert ss._currency_limb(_defs_log())
 
 
+# --- (7b) P3.34 follow-up: the footer says how many the search found -----------
+#
+# The quick-lookup answers gave 2 to 4 of the 30 definers as "several" 6 of 6
+# (`wave5_p334q_B`), with the count in the Manager's scope block every time.
+
+_FOUND_TAIL = (" in quotation marks among the provisions that best matched the search, so a "
+               "definition worded differently, or not among them, may not appear above.")
+_NONE_FOUND = ("; none of the provisions that best matched the search defines it in "
+               "quotation marks, which is not the same as the term being undefined in law.")
+_NOT_COMPLETED = "; that search did not complete, so nothing above rests on it."
+
+
+def _entry(term, count, ok=True, **kw):
+    e = {"tool": ss.DEFINITIONS_ENTRY, "ok": ok, "term": term}
+    if ok:
+        e.update({"query": f'"{term}" means', "rows": 300, "count": count, "listed": count,
+                  "not_stated": 0, "removed": 0, "longer": 0, "jurisdiction": ""})
+    e.update(kw)
+    return e
+
+
+def test_one_term_the_footer_names_the_count_the_tool_found():
+    log = _defs_log()
+    assert log[0]["count"] == 5
+    assert ss._definitions_sentence(log) == "; it found 5 instruments defining it" + _FOUND_TAIL
+    assert ss._definitions_footer_clause(log) == (
+        ' All legislation in the index was also searched once for provisions defining '
+        '"shop"; it found 5 instruments defining it' + _FOUND_TAIL)
+    assert ss.section_scope_footer(log) == (
+        '\n\n*Search scope: for this reply all legislation in the index was searched once for '
+        'provisions defining "shop"; it found 5 instruments defining it' + _FOUND_TAIL + "*")
+
+
+def test_one_instrument_is_singular():
+    assert ss._definitions_sentence([_entry("interdict", 1)]) == \
+        "; it found 1 instrument defining it" + _FOUND_TAIL
+
+
+def test_the_count_is_the_tools_instruments_not_placeholders_longer_terms_or_filtered_rows():
+    rows = _rows() + [
+        _row("[UNCLEAR: possible reference ukpga/23-24-Vict/159]", '"shop" means a stall'),
+        _row("ssi/2014/1", '"duty free shop" means an export shop.', "regulation/2"),
+        _row("ukpga/1999/9", '"shop" means a store', "section/3", ["England", "Wales"]),
+    ]
+    d = D.build_result(rows, "shop", jurisdiction="scotland")
+    log = []
+    ss.record_definitions(log, TOOL, {"term": "shop"}, json.dumps(d))
+    assert d["unidentified"] == 1 and d["longer_terms_count"] >= 2
+    assert d["removed_by_filters"] >= 1
+    n = d["count"]
+    assert n == len(d["definitions"]) and n == log[0]["count"]
+    assert ss._definitions_sentence(log) == \
+        f"; it found {n} instrument{'s' if n != 1 else ''} defining it" + _FOUND_TAIL
+
+
+def test_the_count_is_every_instrument_found_where_the_list_is_cut():
+    # The tool lists at most `MAX_LISTED` and its block tells the Worker how
+    # many there are; the footer names the same number.
+    rows = [_row(f"ukpga/2000/{i}", '"shop" means premises', "section/1")
+            for i in range(1, D.MAX_LISTED + 6)]
+    d = D.build_result(rows, "shop")
+    log = []
+    ss.record_definitions(log, TOOL, {"term": "shop"}, json.dumps(d))
+    assert d["listed"] < d["count"] == D.MAX_LISTED + 5
+    assert ss._definitions_sentence(log) ==         f"; it found {D.MAX_LISTED + 5} instruments defining it" + _FOUND_TAIL
+
+
+def test_several_terms_each_with_its_count():
+    log = [_entry("shop", 30), _entry("interdict", 7)]
+    assert ss._definitions_footer_clause(log) == (
+        ' All legislation in the index was also searched once for provisions defining "shop" '
+        'and "interdict"; it found 30 instruments defining "shop" and 7 defining "interdict"'
+        + _FOUND_TAIL)
+    assert ss._definitions_sentence([_entry("shop", 30), _entry("interdict", 0)]) == \
+        '; it found 30 instruments defining "shop" and none defining "interdict"' + _FOUND_TAIL
+    assert ss._definitions_sentence([_entry("interdict", 0), _entry("shop", 1)]) == \
+        '; it found no instrument defining "interdict" and 1 defining "shop"' + _FOUND_TAIL
+    assert ss._definitions_sentence(
+        [_entry("shop", 30), _entry("occupier", 2), _entry("interdict", 7)]) == \
+        ('; it found 30 instruments defining "shop", 2 defining "occupier" and 7 defining '
+         '"interdict"' + _FOUND_TAIL)
+
+
+def test_a_term_whose_search_did_not_complete_has_no_count():
+    log = [_entry("shop", 30), _entry("kiosk", 0, ok=False)]
+    clause = ss._definitions_footer_clause(log)
+    assert 'defining "shop" and "kiosk"; it found 30 instruments defining "shop"' + \
+        _FOUND_TAIL in clause
+    assert 'defining "kiosk" in quotation' not in clause
+
+
+def test_a_term_searched_again_is_counted_once_with_its_largest_count():
+    # One search per Deep Research step; the term in any case.
+    log = [_entry("shop", 28), _entry("Shop", 30), _entry("shop", 29)]
+    assert ss._definitions_sentence(log) == "; it found 30 instruments defining it" + _FOUND_TAIL
+    log = [_entry("shop", 28), _entry("interdict", 7), _entry("SHOP", 30)]
+    assert ss._definitions_sentence(log) == \
+        '; it found 30 instruments defining "shop" and 7 defining "interdict"' + _FOUND_TAIL
+
+
+def test_at_most_three_terms_are_counted_like_the_opening():
+    log = [_entry("a", 1), _entry("b", 2), _entry("c", 3), _entry("d", 4)]
+    clause = ss._definitions_footer_clause(log)
+    assert 'defining "a", "b" and "c" and 1 more; it found 1 instrument defining "a", 2 defining ' \
+        '"b" and 3 defining "c"' + _FOUND_TAIL in clause
+    assert '"d"' not in clause
+
+
+def test_the_none_found_and_not_completed_branches_are_unchanged():
+    assert ss._definitions_sentence([_entry("shop", 0)]) == _NONE_FOUND
+    assert ss._definitions_sentence([_entry("shop", 0), _entry("kiosk", 0)]) == _NONE_FOUND
+    assert ss._definitions_sentence([_entry("shop", 0), _entry("kiosk", 0, ok=False)]) == \
+        _NONE_FOUND
+    assert ss._definitions_sentence([_entry("shop", 0, ok=False)]) == _NOT_COMPLETED
+    assert ss._definitions_sentence(
+        [_entry("shop", 0, ok=False), _entry("kiosk", 0, ok=False)]) == _NOT_COMPLETED
+    none = []
+    ss.record_definitions(none, TOOL, {}, json.dumps(D.build_result([], "shop")))
+    assert ss._definitions_footer_clause(none).endswith(_NONE_FOUND)
+
+
+def test_the_count_words_trip_no_negative_detector():
+    from tools.replay_report import NEG_ASSERTED
+    for log in ([_entry("shop", 30)], [_entry("shop", 1)],
+                [_entry("shop", 30), _entry("interdict", 0)]):
+        assert not NEG_ASSERTED.search(ss._definitions_footer_clause(log))
+        assert "lawyer" not in ss._definitions_footer_clause(log)
+
+
 # --- (8) wiring: the research Workers only -----------------------------------
 
 def _names(tools):
@@ -566,10 +695,16 @@ def test_offered_to_the_research_workers(rm, cm):
 
 
 @pytest.mark.parametrize("rm", ["legislation_only", "legislation_and_case_law"])
-def test_not_offered_to_the_quick_lookup_worker(rm):
-    assert TOOL not in _names(get_worker_tools(rm, "conversational"))
-    assert TOOL in QUICK_LOOKUP_WITHHELD_TOOLS
-    assert json.loads(withheld_tool_result(TOOL))["run"] is False
+def test_offered_to_the_quick_lookup_worker(rm):
+    # P3.34 follow-up (user decision, Session 52; `wave5_p334q_A`/`_B`): the
+    # quick-lookup Worker is offered the tool, the same schema object the
+    # research Workers get, and only `get_legislation_text` is withheld.
+    quick = get_worker_tools(rm, "conversational")
+    assert TOOL in _names(quick)
+    assert TOOL not in QUICK_LOOKUP_WITHHELD_TOOLS
+    research = get_worker_tools(rm)
+    assert [t for t in quick if t["function"]["name"] == TOOL] ==         [t for t in research if t["function"]["name"] == TOOL]
+    assert json.loads(withheld_tool_result("get_legislation_text"))["run"] is False
 
 
 @pytest.mark.parametrize("rm", ["case_law_only", "parliamentary_records", "westminster_records"])

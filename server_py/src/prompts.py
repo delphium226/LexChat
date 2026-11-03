@@ -272,8 +272,9 @@ _NOT_HELD_RULE = """NOT HELD IS NOT A WRONG CITATION:
 
 
 # P3.34 (B11): the one line naming `find_definitions`, in the two research
-# Worker prompts whose tool set offers it (`schemas.get_worker_tools`). Not in
-# the quick-lookup Worker's prompt: that Worker is not offered the tool. The
+# Worker prompts. Not in the quick-lookup Worker's prompt: that Worker is
+# offered the tool since the P3.34 follow-up, measured with this line absent
+# (`schemas.QUICK_LOOKUP_WITHHELD_TOOLS`), so its prompt is unchanged. The
 # load-bearing half is code: the tool filters the rows, and its block, the
 # Manager's limb and the footer each say the list is one search, not a census.
 # Written out INSIDE each prompt's literal (not spliced in), so `seam_replay`'s
